@@ -1,0 +1,323 @@
+<?php if(!class_exists('Rain\Tpl')){exit;}?><main class="app-main">
+  <div class="app-content-header">
+    <div class="container-fluid">
+      <div class="portal-page-header">
+        <div class="portal-kicker"><i class="bi bi-cpu"></i> Análise Inteligente</div>
+        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+          <div>
+            <h1 class="portal-page-title">Indicadores inteligentes do portal</h1>
+            <p class="portal-page-subtitle">Dados consolidados das unidades, comparativos por período, alertas automáticos, rankings e textos explicativos gerados por regras do próprio sistema.</p>
+          </div>
+          <button class="btn btn-light text-primary" id="btnAtualizarAnalise"><i class="bi bi-arrow-clockwise me-1"></i> Atualizar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-content">
+    <div class="container-fluid">
+      <div class="card analysis-filter-card mb-4">
+        <div class="card-body">
+          <div class="row g-3 align-items-end">
+            <div class="col-xl-3 col-md-6">
+              <label class="form-label" for="filtroPeriodo">Comparativo</label>
+              <select class="form-select" id="filtroPeriodo">
+                <option value="semanal">Semana atual x anterior</option>
+                <option value="mensal" selected>Mês atual x anterior</option>
+                <option value="anual">Ano atual x anterior</option>
+                <option value="personalizado">Intervalo personalizado</option>
+              </select>
+            </div>
+            <div class="col-xl-3 col-md-6">
+              <label class="form-label" for="filtroUnidade">Unidade</label>
+              <select class="form-select" id="filtroUnidade">
+                <option value="">Todas as unidades</option>
+              </select>
+            </div>
+            <div class="col-xl-2 col-md-6 custom-range d-none">
+              <label class="form-label" for="filtroInicio">Início</label>
+              <input type="date" class="form-control" id="filtroInicio">
+            </div>
+            <div class="col-xl-2 col-md-6 custom-range d-none">
+              <label class="form-label" for="filtroFim">Fim</label>
+              <input type="date" class="form-control" id="filtroFim">
+            </div>
+            <div class="col-xl-2 col-md-12">
+              <button class="btn btn-primary w-100" id="btnAplicarFiltros"><i class="bi bi-funnel-fill me-1"></i> Aplicar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6"><div class="analysis-kpi"><div class="analysis-kpi-label">Total de atendimentos</div><div class="analysis-kpi-value" data-summary="total_atendimentos">0</div><div class="analysis-kpi-note">Pessoas atendidas no período</div></div></div>
+        <div class="col-xl-3 col-md-6"><div class="analysis-kpi"><div class="analysis-kpi-label">Refeições servidas</div><div class="analysis-kpi-value" data-summary="total_refeicoes_servidas">0</div><div class="analysis-kpi-note">Total consolidado recebido</div></div></div>
+        <div class="col-xl-3 col-md-6"><div class="analysis-kpi"><div class="analysis-kpi-label">Refeições ofertadas</div><div class="analysis-kpi-value" data-summary="total_refeicoes_ofertadas">0</div><div class="analysis-kpi-note">Oferta informada pelas unidades</div></div></div>
+        <div class="col-xl-3 col-md-6"><div class="analysis-kpi"><div class="analysis-kpi-label">Sobras de refeições</div><div class="analysis-kpi-value" data-summary="total_sobras">0</div><div class="analysis-kpi-note">Saldo operacional apurado</div></div></div>
+        <div class="col-xl-3 col-md-6"><div class="analysis-kpi"><div class="analysis-kpi-label">Senhas/pessoas</div><div class="analysis-kpi-value" data-summary="total_senhas_pessoas_atendidas">0</div><div class="analysis-kpi-note">Base enviada pelo sistema local</div></div></div>
+        <div class="col-xl-3 col-md-6"><div class="analysis-kpi"><div class="analysis-kpi-label">PDFs recebidos</div><div class="analysis-kpi-value" data-summary="total_pdfs">0</div><div class="analysis-kpi-note">Arquivos no portal</div></div></div>
+        <div class="col-xl-3 col-md-6"><div class="analysis-kpi"><div class="analysis-kpi-label">Último relatório</div><div class="analysis-kpi-value fs-5" data-summary-date="ultimo_relatorio">-</div><div class="analysis-kpi-note">Recebimento mais recente</div></div></div>
+        <div class="col-xl-3 col-md-6"><div class="analysis-kpi"><div class="analysis-kpi-label">Último backup</div><div class="analysis-kpi-value fs-5" data-summary-date="ultimo_backup">-</div><div class="analysis-kpi-note">Backup mais recente recebido</div></div></div>
+        <div class="col-xl-3 col-md-6"><div class="analysis-kpi"><div class="analysis-kpi-label">Unidades ativas</div><div class="analysis-kpi-value" data-summary="unidades_ativas">0</div><div class="analysis-kpi-note">Unidades detectadas nos relatórios</div></div></div>
+      </div>
+
+      <div class="row g-3 mb-4" id="insightCards"></div>
+
+      <div class="row g-4 mb-4">
+        <div class="col-xl-8">
+          <div class="card h-100">
+            <div class="card-header">
+              <h3 class="card-title mb-0">Evolução do período</h3>
+              <div class="text-muted small">Atendimentos e refeições servidas por dia.</div>
+            </div>
+            <div class="card-body">
+              <div class="analysis-chart-box"><canvas id="chartAtendimentos"></canvas></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-xl-4">
+          <div class="card h-100">
+            <div class="card-header">
+              <h3 class="card-title mb-0">Ofertadas x servidas x sobras</h3>
+              <div class="text-muted small">Aproveitamento operacional do período.</div>
+            </div>
+            <div class="card-body">
+              <div class="analysis-chart-box"><canvas id="chartRefeicoes"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-xl-5">
+          <div class="card h-100">
+            <div class="card-header">
+              <h3 class="card-title mb-0">Alertas inteligentes</h3>
+              <div class="text-muted small">Quedas, picos, sobras críticas e ausência de dados.</div>
+            </div>
+            <div class="card-body">
+              <div class="analysis-alert-list" id="alertasLista"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-xl-7">
+          <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center gap-3 flex-wrap">
+              <div>
+                <h3 class="card-title mb-0">Ranking por unidade</h3>
+                <div class="text-muted small">Atendimentos, refeições, sobras e aproveitamento.</div>
+              </div>
+              <span class="badge badge-soft-primary rounded-pill px-3 py-2"><i class="bi bi-trophy me-1"></i> Top unidades</span>
+            </div>
+            <div class="card-body p-0 table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Unidade</th>
+                    <th class="text-end">Atendimentos</th>
+                    <th class="text-end">Refeições</th>
+                    <th class="text-end">Sobras</th>
+                    <th class="text-end">PDFs/relatórios</th>
+                    <th class="text-end">Aproveitamento</th>
+                  </tr>
+                </thead>
+                <tbody id="rankingTabela"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body d-flex gap-3 align-items-start">
+              <div class="analysis-ai-icon"><i class="bi bi-stars"></i></div>
+              <div>
+                <h3 class="card-title mb-2">Texto automático dos indicadores</h3>
+                <p class="mb-0 text-muted" id="textoGeralAnalise">Carregando análise automática...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const state = { atendimentoChart: null, refeicoesChart: null };
+  const nf = new Intl.NumberFormat('pt-BR');
+
+  function qs(id) { return document.getElementById(id); }
+  function fmt(value) { return nf.format(Number(value || 0)); }
+  function fmtDate(value) {
+    if (!value) return '-';
+    const date = new Date(String(value).replace(' ', 'T'));
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('pt-BR');
+  }
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char];
+    });
+  }
+  function statusClass(status) {
+    return ['positivo', 'critico', 'atencao', 'informativo'].includes(status) ? status : 'informativo';
+  }
+  function buildQuery() {
+    const periodo = qs('filtroPeriodo')?.value || 'mensal';
+    const params = new URLSearchParams({ periodo });
+    const unidade = qs('filtroUnidade')?.value;
+    if (unidade) params.set('unidade_id', unidade);
+    if (periodo === 'personalizado') {
+      const inicio = qs('filtroInicio')?.value;
+      const fim = qs('filtroFim')?.value;
+      if (inicio) params.set('inicio', inicio);
+      if (fim) params.set('fim', fim);
+    }
+    return params.toString();
+  }
+  async function getJson(url) {
+    const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) throw new Error('Falha ao carregar ' + url);
+    return response.json();
+  }
+  function setSummary(summary) {
+    document.querySelectorAll('[data-summary]').forEach(function (el) {
+      el.textContent = fmt(summary?.[el.dataset.summary] || 0);
+    });
+    document.querySelectorAll('[data-summary-date]').forEach(function (el) {
+      el.textContent = fmtDate(summary?.[el.dataset.summaryDate]);
+    });
+  }
+  function renderInsightCards(cards) {
+    const wrap = qs('insightCards');
+    if (!wrap) return;
+    wrap.innerHTML = (cards || []).map(function (card) {
+      const variation = Number(card.percentual_variacao || 0);
+      return `
+        <div class="col-xl-3 col-md-6">
+          <div class="card analysis-insight ${statusClass(card.status)}">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                <div class="analysis-kpi-label">${escapeHtml(card.titulo || '-')}</div>
+                <span class="analysis-status">${escapeHtml(card.status || 'info')}</span>
+              </div>
+              <div class="analysis-kpi-value">${escapeHtml(card.numero_principal ?? 0)}</div>
+              <div class="analysis-variation ${variation >= 0 ? 'up' : 'down'}">${variation.toFixed(2)}%</div>
+              <p class="text-muted mb-0 mt-3">${escapeHtml(card.texto || '')}</p>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+  function renderAlerts(alerts) {
+    const wrap = qs('alertasLista');
+    if (!wrap) return;
+    wrap.innerHTML = (alerts || []).map(function (alert) {
+      return `
+        <div class="analysis-alert ${statusClass(alert.nivel)}">
+          <div class="d-flex justify-content-between gap-3">
+            <strong>${escapeHtml(alert.titulo || '-')}</strong>
+            <span class="text-uppercase small fw-bold">${escapeHtml(alert.nivel || '')}</span>
+          </div>
+          <p class="mb-0 mt-2 text-muted">${escapeHtml(alert.mensagem || '')}</p>
+        </div>`;
+    }).join('');
+  }
+  function renderRanking(rows) {
+    const tbody = qs('rankingTabela');
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Nenhum relatório encontrado para o período.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function (row) {
+      return `
+        <tr>
+          <td><strong>${escapeHtml(row.unidade || 'Unidade não identificada')}</strong></td>
+          <td class="text-end">${fmt(row.total_atendimentos)}</td>
+          <td class="text-end">${fmt(row.total_refeicoes)}</td>
+          <td class="text-end">${fmt(row.sobra_refeicoes)}</td>
+          <td class="text-end">${fmt(row.total_relatorios)}</td>
+          <td class="text-end">${Number(row.aproveitamento_percentual || 0).toFixed(2)}%</td>
+        </tr>`;
+    }).join('');
+  }
+  function renderCharts(series) {
+    if (typeof Chart === 'undefined') return;
+    const labels = (series || []).map(item => fmtDate(item.data));
+    const atendimentos = (series || []).map(item => Number(item.total_atendimentos || 0));
+    const servidas = (series || []).map(item => Number(item.qtd_refeicoes_servidas || 0));
+    const ofertadas = (series || []).map(item => Number(item.refeicoes_ofertadas || 0));
+    const sobras = (series || []).map(item => Number(item.sobra_refeicoes || 0));
+
+    if (state.atendimentoChart) state.atendimentoChart.destroy();
+    state.atendimentoChart = new Chart(qs('chartAtendimentos'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Atendimentos', data: atendimentos, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,.12)', fill: true, tension: .35 },
+          { label: 'Refeições servidas', data: servidas, borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,.08)', fill: true, tension: .35 }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
+    });
+
+    if (state.refeicoesChart) state.refeicoesChart.destroy();
+    state.refeicoesChart = new Chart(qs('chartRefeicoes'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Ofertadas', data: ofertadas, backgroundColor: '#f59e0b' },
+          { label: 'Servidas', data: servidas, backgroundColor: '#16a34a' },
+          { label: 'Sobras', data: sobras, backgroundColor: '#dc2626' }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
+    });
+  }
+  async function loadUnits() {
+    const select = qs('filtroUnidade');
+    if (!select) return;
+    try {
+      const units = await getJson('/admin/api/dashboard/unidades');
+      units.forEach(function (unit) {
+        const option = document.createElement('option');
+        option.value = unit.id;
+        option.textContent = unit.nome;
+        select.appendChild(option);
+      });
+    } catch (error) {}
+  }
+  async function loadAnalysis() {
+    const query = buildQuery();
+    try {
+      const [summary, analysis, ranking] = await Promise.all([
+        getJson('/admin/api/dashboard/resumo?' + query),
+        getJson('/admin/api/dashboard/analise-inteligente?' + query),
+        getJson('/admin/api/dashboard/ranking-unidades?' + query)
+      ]);
+      setSummary(summary);
+      renderInsightCards(analysis.cards);
+      renderAlerts(analysis.alertas);
+      renderRanking(ranking);
+      renderCharts(analysis.series);
+      const text = qs('textoGeralAnalise');
+      if (text) text.textContent = analysis.texto_geral || 'Não foi possível gerar texto automático para o período.';
+    } catch (error) {
+      if (window.PortalUI) window.PortalUI.showToast('error', 'Não foi possível carregar a análise inteligente.');
+    }
+  }
+  function toggleCustomRange() {
+    const show = qs('filtroPeriodo')?.value === 'personalizado';
+    document.querySelectorAll('.custom-range').forEach(el => el.classList.toggle('d-none', !show));
+  }
+
+  qs('filtroPeriodo')?.addEventListener('change', toggleCustomRange);
+  qs('btnAplicarFiltros')?.addEventListener('click', loadAnalysis);
+  qs('btnAtualizarAnalise')?.addEventListener('click', loadAnalysis);
+  toggleCustomRange();
+  loadUnits().finally(loadAnalysis);
+});
+</script>

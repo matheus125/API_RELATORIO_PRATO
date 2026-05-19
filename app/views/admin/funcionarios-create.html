@@ -1,0 +1,131 @@
+<div class="content-wrapper">
+  <main class="app-main">
+    <div class="app-content px-3 px-md-4 py-4">
+      <section class="portal-page-header">
+        <span class="portal-kicker"><i class="fa-solid fa-user-plus"></i> Novo cadastro</span>
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+          <div>
+            <h1 class="portal-page-title">Cadastrar funcionário</h1>
+            <p class="portal-page-subtitle">Crie um novo acesso com informações completas, máscara automática e formulário otimizado para desktop e celular.</p>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <a href="/admin/funcionarios" class="btn btn-light"><i class="fa-solid fa-arrow-left me-2"></i>Voltar</a>
+          </div>
+        </div>
+      </section>
+
+      <form class="needs-validation" action="/admin/funcionarios/create" method="post" novalidate>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title mb-0"><i class="fa-solid fa-address-card me-2 text-primary"></i>Dados do usuário</h3>
+          </div>
+          <div class="card-body">
+            <div class="row g-4">
+              <div class="col-12 col-lg-6">
+                <label for="nome_funcionario" class="form-label fw-semibold">Nome completo</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fa-solid fa-user"></i></span>
+                  <input type="text" class="form-control" id="nome_funcionario" name="nome_funcionario" placeholder="Digite o nome completo" required>
+                </div>
+                <div class="invalid-feedback">Informe o nome.</div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <label for="nrphone" class="form-label fw-semibold">Telefone</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fa-solid fa-phone"></i></span>
+                  <input type="text" class="form-control" id="nrphone" name="nrphone" placeholder="(92) 99999-9999" required>
+                </div>
+                <div class="invalid-feedback">Informe o telefone.</div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <label for="email" class="form-label fw-semibold">E-mail</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fa-solid fa-envelope"></i></span>
+                  <input type="email" class="form-control" id="email" name="email" placeholder="Digite o e-mail" required>
+                </div>
+                <div class="invalid-feedback">Informe um e-mail válido.</div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <label for="cpf" class="form-label fw-semibold">CPF / Login</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fa-solid fa-id-card"></i></span>
+                  <input type="text" class="form-control" id="cpf" name="cpf" placeholder="000.000.000-00" required>
+                </div>
+                <div class="invalid-feedback">Informe o CPF.</div>
+                <small id="cpf-msg" class="text-danger d-block mt-1"></small>
+              </div>
+              <div class="col-12 col-lg-6">
+                <label for="senha" class="form-label fw-semibold">Senha</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
+                  <input type="password" class="form-control" id="senha" name="senha" placeholder="Digite a senha" required>
+                </div>
+                <div class="invalid-feedback">Informe a senha.</div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <label for="perfil" class="form-label fw-semibold">Perfil de acesso</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fa-solid fa-shield-halved"></i></span>
+                  <select name="perfil" id="perfil" class="form-select" required>
+                    <option value="">Selecione o perfil</option>
+                    <option value="ADMIN">Administrador</option>
+                    <option value="SUPERVISOR">Supervisor</option>
+                    <option value="ASSESSOR">Assessor</option>
+                  </select>
+                </div>
+                <div class="invalid-feedback">Selecione o perfil.</div>
+              </div>
+            </div>
+          </div>
+          <div class="card-footer d-flex flex-column flex-md-row justify-content-between gap-2">
+            <a href="/admin/funcionarios" class="btn btn-outline-secondary"><i class="fa-solid fa-arrow-left me-2"></i>Cancelar</a>
+            <div class="d-flex flex-column flex-sm-row gap-2">
+              <button type="reset" class="btn btn-warning text-white"><i class="fa-solid fa-eraser me-2"></i>Limpar</button>
+              <button type="submit" class="btn btn-primary" id="btn-salvar"><i class="fa-solid fa-floppy-disk me-2"></i>Salvar cadastro</button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script>
+  $(function () {
+    $('#cpf').mask('000.000.000-00');
+    $('#nrphone').mask('(00) 00000-0000');
+
+    function validarCPF(cpf) {
+      cpf = (cpf || '').replace(/\D/g, '');
+      if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+      let soma = 0, resto;
+      for (let i = 1; i <= 9; i++) soma += parseInt(cpf.substring(i - 1, i), 10) * (11 - i);
+      resto = (soma * 10) % 11; if (resto === 10 || resto === 11) resto = 0;
+      if (resto !== parseInt(cpf.substring(9, 10), 10)) return false;
+      soma = 0;
+      for (let i = 1; i <= 10; i++) soma += parseInt(cpf.substring(i - 1, i), 10) * (12 - i);
+      resto = (soma * 10) % 11; if (resto === 10 || resto === 11) resto = 0;
+      return resto === parseInt(cpf.substring(10, 11), 10);
+    }
+
+    $('#cpf').on('blur', function () {
+      const ok = validarCPF($(this).val());
+      $('#cpf-msg').text($(this).val().trim() && !ok ? 'CPF inválido.' : '');
+      $(this).toggleClass('is-invalid', $(this).val().trim() && !ok);
+    });
+
+    $('.needs-validation').on('submit', function (event) {
+      const cpfValido = validarCPF($('#cpf').val());
+      if (!this.checkValidity() || !cpfValido) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!cpfValido) {
+          $('#cpf').addClass('is-invalid');
+          $('#cpf-msg').text('CPF inválido.');
+        }
+      }
+      this.classList.add('was-validated');
+    });
+  });
+</script>

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <title>Portal de Funcionários</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="title" content="Portal de Funcionários | Painel Administrativo" />
+  <meta name="description" content="Sistema administrativo com login, dashboard, funcionários e segurança." />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/source-sans-3@5.0.12/index.css" />
+  <link rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/overlayscrollbars@2.10.1/styles/overlayscrollbars.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="/res/admin/dist/css/adminlte.css" />
+</head>
+
+<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+  <div class="app-wrapper">
+    <nav class="app-header navbar navbar-expand bg-body painel-header border-bottom shadow-sm">
+      <div class="container-fluid">
+        <ul class="navbar-nav">
+          <li class="nav-item">
+            <a class="nav-link" data-lte-toggle="sidebar" href="#" role="button"><i class="bi bi-list"></i></a>
+          </li>
+          <li class="nav-item d-none d-md-block">
+            <a href="/admin" class="nav-link">Dashboard</a>
+          </li>
+        </ul>
+
+        <ul class="navbar-nav ms-auto align-items-center">
+          <li class="nav-item dropdown user-menu">
+            <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
+              <img src="/res/admin/dist/assets/img/avatar.png" class="user-image rounded-circle shadow-sm"
+                alt="User Image" />
+              <span class="d-none d-md-inline">{function="getUserName()"}</span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-lg dropdown-menu-end shadow-sm">
+              <li class="user-header text-bg-primary">
+                <img src="/res/admin/dist/assets/img/avatar.png" class="rounded-circle shadow" alt="User Image" />
+                <p>
+                  {function="getUserName()"}
+                  <small>Perfil: {function="currentUserPerfil()"}</small>
+                </p>
+              </li>
+              <li class="user-footer">
+                <a href="/admin/logout" class="btn btn-danger btn-flat float-end">Sair</a>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </nav>
+
+    <aside class="app-sidebar bg-body-secondary" data-bs-theme="light">
+      <div class="sidebar-brand">
+        <a href="/admin" class="brand-link">
+          <img src="/res/admin/dist/assets/img/AdminLTELogo.png" alt="Logo" class="brand-image opacity-75 shadow-sm" />
+          <span class="brand-text fw-semibold">Portal Funcionários</span>
+        </a>
+      </div>
+
+      <div class="sidebar-wrapper">
+        <nav class="mt-2">
+          <ul class="nav sidebar-menu flex-column" data-lte-toggle="treeview" role="menu" data-accordion="false">
+            <li class="nav-header">PRINCIPAL</li>
+            {if="canAccess('DASHBOARD_VIEW')"}
+            <li class="nav-item"><a href="/admin" class="nav-link"><i class="nav-icon bi bi-speedometer2"></i>
+                <p>Dashboard</p>
+              </a></li>
+            {/if}
+
+            <li class="nav-header">CADASTROS</li>
+            {if="canAccess('FUNCIONARIOS_VIEW')"}
+            <li class="nav-item"><a href="/admin/funcionarios" class="nav-link"><i class="nav-icon bi bi-people"></i>
+                <p>Funcionários</p>
+              </a></li>
+            {/if}
+
+
+            <li class="nav-header">RELATÓRIOS</li>
+            {if="canAccess('DASHBOARD_VIEW')"}
+            <li class="nav-item"><a href="/admin/relatorio/pdf/historico" class="nav-link"><i
+                  class="nav-icon bi bi-file-earmark-pdf"></i>
+                <p>Histórico PDF</p>
+              </a></li>
+            <li class="nav-item"><a href="/admin/relatorio/planilha" class="nav-link"><i
+                  class="nav-icon bi bi-file-earmark-excel"></i>
+                <p>Planilha mensal</p>
+              </a></li>
+            <li class="nav-item"><a href="/admin/consulta-unificada" class="nav-link"><i
+                  class="nav-icon bi bi-diagram-3"></i>
+                <p>Consulta unificada</p>
+              </a></li>
+            {/if}
+
+            {if="canAnyAccess(['ACL_PROFILES_MANAGE','USUARIOS_SECURITY_MANAGE','ACL_DENIED_VIEW','AUDITORIA_VIEW'])"}
+            <li class="nav-header">SEGURANÇA</li>
+            {/if}
+            {if="canAccess('ACL_PROFILES_MANAGE')"}
+            <li class="nav-item"><a href="/admin/seguranca/permissoes" class="nav-link"><i
+                  class="nav-icon bi bi-shield-lock"></i>
+                <p>Permissões</p>
+              </a></li>
+            {/if}
+            {if="canAccess('USUARIOS_SECURITY_MANAGE')"}
+            <li class="nav-item"><a href="/admin/usuarios/seguranca" class="nav-link"><i
+                  class="nav-icon bi bi-person-lock"></i>
+                <p>Usuários e status</p>
+              </a></li>
+            {/if}
+            {if="canAccess('ACL_DENIED_VIEW')"}
+            <li class="nav-item"><a href="/admin/seguranca/acessos-negados" class="nav-link"><i
+                  class="nav-icon bi bi-ban"></i>
+                <p>Acessos negados</p>
+              </a></li>
+            {/if}
+            {if="canAccess('AUDITORIA_VIEW')"}
+            <li class="nav-item"><a href="/admin/seguranca/auditoria" class="nav-link"><i
+                  class="nav-icon bi bi-clock-history"></i>
+                <p>Auditoria</p>
+              </a></li>
+            {/if}
+          </ul>
+        </nav>
+      </div>
+    </aside>

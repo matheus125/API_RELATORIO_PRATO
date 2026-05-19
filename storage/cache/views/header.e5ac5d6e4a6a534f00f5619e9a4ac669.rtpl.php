@@ -1,0 +1,462 @@
+<?php if(!class_exists('Rain\Tpl')){exit;}?><!doctype html>
+<html lang="pt-br">
+
+<head charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <title>Portal de Relatórios</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="title" content="Portal de Relatórios | Painel Administrativo" />
+  <meta name="description" content="Portal institucional de relatórios do Governo do Estado do Amazonas." />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/source-sans-3@5.0.12/index.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/overlayscrollbars@2.10.1/styles/overlayscrollbars.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="/res/admin/dist/css/adminlte.css" />
+  <style>
+    :root {
+      --portal-primary: #0d6efd;
+      --portal-primary-dark: #0b57d0;
+      --portal-primary-soft: #eaf2ff;
+      --portal-ink: #0f172a;
+      --portal-muted: #64748b;
+      --portal-border: #dbe5f0;
+      --portal-bg: #f4f7fb;
+      --portal-card-shadow: 0 16px 40px rgba(15, 23, 42, .08);
+      --portal-radius: 20px;
+      --portal-radius-sm: 14px;
+    }
+    body {
+      font-family: "Source Sans 3", Arial, sans-serif;
+      background: linear-gradient(180deg, #f8fbff 0%, var(--portal-bg) 100%);
+      color: var(--portal-ink);
+    }
+    .app-main, .content-wrapper, .content, .app-content { min-width: 0; }
+    .painel-header {
+      background: linear-gradient(90deg, #ffffff 0%, #f7fbff 70%, #eef5ff 100%) !important;
+      backdrop-filter: blur(8px);
+    }
+    .app-sidebar {
+      border-right: 1px solid rgba(148, 163, 184, .15);
+      box-shadow: 6px 0 24px rgba(15, 23, 42, .03);
+    }
+    .sidebar-brand {
+      border-bottom: 1px solid rgba(148, 163, 184, .12);
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    }
+    .brand-link { padding-block: 1rem; }
+    .brand-link .brand-image {
+      width: 34px;
+      height: 34px;
+      max-height: 34px;
+      border-radius: 10px;
+      object-fit: contain;
+      background: #eef5ff;
+      padding: 5px;
+    }
+    .brand-link .brand-text {
+      font-weight: 800 !important;
+      color: var(--portal-ink);
+      letter-spacing: .2px;
+    }
+    .sidebar-menu .nav-header {
+      color: #7c8da3;
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-top: .5rem;
+      font-weight: 800;
+    }
+    .sidebar-menu .nav-link {
+      border-radius: 14px;
+      margin: 3px 10px;
+      font-weight: 700;
+      color: #334155;
+      transition: .18s ease;
+    }
+    .sidebar-menu .nav-link:hover {
+      background: #edf4ff;
+      color: var(--portal-primary-dark);
+    }
+    .sidebar-menu .nav-link.active {
+      background: linear-gradient(90deg, var(--portal-primary) 0%, var(--portal-primary-dark) 100%);
+      color: #fff;
+      box-shadow: 0 12px 24px rgba(13, 110, 253, .18);
+    }
+    .sidebar-menu .nav-link.active .nav-icon { color: #fff !important; }
+    .portal-page-header {
+      margin-bottom: 1.2rem;
+      padding: 1.4rem 1.45rem;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #0d6efd 0%, #246bff 55%, #5598ff 100%);
+      color: #fff;
+      box-shadow: var(--portal-card-shadow);
+      position: relative;
+      overflow: hidden;
+    }
+    .portal-page-header::before,
+    .portal-page-header::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255,255,255,.09);
+    }
+    .portal-page-header::before { width: 220px; height: 220px; top: -80px; right: -50px; }
+    .portal-page-header::after { width: 140px; height: 140px; bottom: -50px; right: 130px; }
+    .portal-page-header > * { position: relative; z-index: 1; }
+    .portal-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .5rem .9rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,.15);
+      border: 1px solid rgba(255,255,255,.18);
+      font-weight: 800;
+      font-size: .82rem;
+      margin-bottom: .9rem;
+    }
+    .portal-page-title { margin: 0; font-size: clamp(1.6rem, 2.5vw, 2.4rem); font-weight: 800; letter-spacing: -.02em; }
+    .portal-page-subtitle { margin: .55rem 0 0; color: rgba(255,255,255,.88); max-width: 900px; font-size: 1rem; }
+    .portal-card, .card {
+      border: 1px solid rgba(219,229,240,.95);
+      border-radius: var(--portal-radius);
+      box-shadow: var(--portal-card-shadow);
+      overflow: hidden;
+    }
+    .card-header {
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      border-bottom: 1px solid #eef2f7;
+      padding: 1rem 1.15rem;
+    }
+    .card-title { font-weight: 800; color: var(--portal-ink); }
+    .table-responsive { overflow-x: auto; }
+    .table { --bs-table-bg: transparent; margin-bottom: 0; }
+    .table thead th {
+      white-space: nowrap;
+      background: #f7fbff;
+      color: #475569;
+      font-size: .82rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      border-bottom-width: 1px;
+    }
+    .table tbody td { vertical-align: middle; }
+    .btn {
+      border-radius: 14px;
+      font-weight: 700;
+      padding-inline: 1rem;
+    }
+    .btn-xs { padding: .4rem .75rem; font-size: .78rem; }
+    .form-control, .form-select {
+      min-height: 46px;
+      border-radius: 14px;
+      border-color: #d6e0ea;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: #7fb0ff;
+      box-shadow: 0 0 0 .2rem rgba(13,110,253,.12);
+    }
+    .badge-soft-primary { background: #eaf2ff; color: #0b57d0; }
+    .badge-soft-success { background: #e9f8ef; color: #15803d; }
+    .badge-soft-warning { background: #fff7e6; color: #b45309; }
+    .badge-soft-danger { background: #fef2f2; color: #b91c1c; }
+    .app-footer {
+      border-top: 1px solid #e5edf6;
+      background: rgba(255,255,255,.82);
+      color: #64748b;
+      padding: 1rem 1.25rem;
+      backdrop-filter: blur(8px);
+    }
+    @media (max-width: 991.98px) {
+      .portal-page-header { padding: 1.2rem 1rem; border-radius: 20px; }
+      .sidebar-menu .nav-link { margin-inline: 8px; }
+    }
+    @media (max-width: 767.98px) {
+      .navbar-nav .nav-item.d-none.d-md-block { display: none !important; }
+      .portal-page-subtitle { font-size: .95rem; }
+      .card-header, .card-body, .card-footer { padding-left: .95rem; padding-right: .95rem; }
+      .btn, .form-control, .form-select { width: 100%; }
+      .table { min-width: 720px; }
+    }
+
+    .portal-toast-container {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 1095;
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+      width: min(92vw, 380px);
+    }
+    .portal-toast {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: start;
+      gap: .85rem;
+      padding: .95rem 1rem;
+      border-radius: 18px;
+      background: rgba(15, 23, 42, .96);
+      color: #fff;
+      box-shadow: 0 22px 44px rgba(15, 23, 42, .22);
+      border: 1px solid rgba(255,255,255,.08);
+      transform: translateY(-8px);
+      opacity: 0;
+      transition: .2s ease;
+    }
+    .portal-toast.show { transform: translateY(0); opacity: 1; }
+    .portal-toast--success { background: linear-gradient(135deg, #166534, #15803d); }
+    .portal-toast--error { background: linear-gradient(135deg, #991b1b, #dc2626); }
+    .portal-toast--warning { background: linear-gradient(135deg, #92400e, #d97706); }
+    .portal-toast--info { background: linear-gradient(135deg, #1d4ed8, #2563eb); }
+    .portal-toast__icon { font-size: 1.15rem; line-height: 1; margin-top: .1rem; }
+    .portal-toast__title { font-weight: 800; margin-bottom: .15rem; }
+    .portal-toast__message { color: rgba(255,255,255,.92); font-size: .94rem; line-height: 1.45; }
+    .portal-toast__close {
+      background: transparent; border: 0; color: rgba(255,255,255,.85);
+      font-size: 1rem; padding: .15rem; cursor: pointer;
+    }
+    .portal-loading-overlay {
+      position: fixed; inset: 0; background: rgba(244,247,251,.62); backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center; z-index: 1080;
+      opacity: 0; pointer-events: none; transition: .18s ease;
+    }
+    .portal-loading-overlay.show { opacity: 1; pointer-events: all; }
+    .portal-loading-card {
+      min-width: min(90vw, 280px); background: #fff; border-radius: 22px; padding: 1.2rem 1.1rem;
+      box-shadow: 0 24px 40px rgba(15, 23, 42, .12); border: 1px solid #e5edf6; text-align: center;
+    }
+    .portal-loading-card .spinner-border { width: 2.2rem; height: 2.2rem; }
+    .portal-skeleton {
+      position: relative; overflow: hidden; background: #eaf0f7 !important; color: transparent !important;
+      border-radius: 14px;
+    }
+    .portal-skeleton::after {
+      content: ''; position: absolute; inset: 0;
+      transform: translateX(-100%);
+      background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.75), rgba(255,255,255,0));
+      animation: portalSkeleton 1.3s infinite;
+    }
+    @keyframes portalSkeleton { 100% { transform: translateX(100%); } }
+    .btn.is-loading { position: relative; pointer-events: none; opacity: .9; }
+    .btn.is-loading .btn-text { opacity: .0; }
+    .btn.is-loading .btn-spinner {
+      position: absolute; inset: 0; display: inline-flex !important; align-items: center; justify-content: center;
+    }
+
+    .analysis-filter-card .form-label {
+      font-weight: 800;
+      color: #334155;
+      font-size: .85rem;
+    }
+    .analysis-kpi {
+      height: 100%;
+      border-radius: 16px;
+      border: 1px solid #dbe5f0;
+      background: #fff;
+      padding: 1rem;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, .06);
+    }
+    .analysis-kpi-label {
+      color: #64748b;
+      font-weight: 800;
+      font-size: .82rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .analysis-kpi-value {
+      color: #0f172a;
+      font-size: clamp(1.45rem, 2.4vw, 2.15rem);
+      font-weight: 900;
+      line-height: 1.05;
+      margin-top: .45rem;
+    }
+    .analysis-kpi-note {
+      color: #64748b;
+      font-size: .88rem;
+      margin-top: .35rem;
+    }
+    .analysis-insight {
+      height: 100%;
+      border-left: 5px solid #2563eb;
+      border-radius: 12px;
+      background: #fff;
+    }
+    .analysis-insight.positivo { border-left-color: #16a34a; }
+    .analysis-insight.atencao { border-left-color: #f59e0b; }
+    .analysis-insight.critico { border-left-color: #dc2626; }
+    .analysis-status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: .25rem .55rem;
+      border-radius: 999px;
+      background: #eaf2ff;
+      color: #0b57d0;
+      font-weight: 900;
+      font-size: .7rem;
+      text-transform: uppercase;
+    }
+    .analysis-insight.positivo .analysis-status { background: #e9f8ef; color: #15803d; }
+    .analysis-insight.atencao .analysis-status { background: #fff7e6; color: #b45309; }
+    .analysis-insight.critico .analysis-status { background: #fef2f2; color: #b91c1c; }
+    .analysis-variation {
+      display: inline-flex;
+      align-items: center;
+      margin-top: .75rem;
+      padding: .32rem .58rem;
+      border-radius: 10px;
+      font-size: .82rem;
+      font-weight: 900;
+      background: #eaf2ff;
+      color: #0b57d0;
+    }
+    .analysis-variation.up { background: #e9f8ef; color: #15803d; }
+    .analysis-variation.down { background: #fef2f2; color: #b91c1c; }
+    .analysis-chart-box {
+      position: relative;
+      min-height: 330px;
+    }
+    .analysis-alert-list {
+      display: grid;
+      gap: .85rem;
+    }
+    .analysis-alert {
+      padding: 1rem;
+      border-radius: 12px;
+      border: 1px solid #dbe5f0;
+      border-left: 5px solid #2563eb;
+      background: #f8fbff;
+    }
+    .analysis-alert.positivo {
+      border-left-color: #16a34a;
+      background: #f7fdf9;
+    }
+    .analysis-alert.atencao {
+      border-left-color: #f59e0b;
+      background: #fffaf0;
+    }
+    .analysis-alert.critico {
+      border-left-color: #dc2626;
+      background: #fff7f7;
+    }
+    .analysis-ai-icon {
+      width: 48px;
+      height: 48px;
+      flex: 0 0 48px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      color: #fff;
+      background: linear-gradient(135deg, #0d6efd, #0b57d0);
+    }
+
+  </style>
+</head>
+
+<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+  <div class="app-wrapper">
+    <nav class="app-header navbar navbar-expand bg-body painel-header border-bottom shadow-sm">
+      <div class="container-fluid">
+        <ul class="navbar-nav align-items-center">
+          <li class="nav-item">
+            <a class="nav-link" data-lte-toggle="sidebar" href="#" role="button"><i class="bi bi-list"></i></a>
+          </li>
+          <li class="nav-item d-none d-md-block">
+            <a href="/admin" class="nav-link fw-semibold">Portal de Relatórios</a>
+          </li>
+        </ul>
+
+        <div class="d-none d-lg-flex align-items-center gap-2 text-muted small fw-semibold">
+          <span class="badge text-bg-primary rounded-pill px-3 py-2"><i class="bi bi-buildings me-1"></i> Governo do Estado do Amazonas</span>
+        </div>
+
+        <ul class="navbar-nav ms-auto align-items-center">
+          <li class="nav-item dropdown user-menu">
+            <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
+              <img src="/res/admin/dist/assets/img/avatar.png" class="user-image rounded-circle shadow-sm" alt="User Image" />
+              <span class="d-none d-md-inline"><?php echo getUserName(); ?></span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-lg dropdown-menu-end shadow-sm">
+              <li class="user-header text-bg-primary">
+                <img src="/res/admin/dist/assets/img/avatar.png" class="rounded-circle shadow" alt="User Image" />
+                <p>
+                  <?php echo getUserName(); ?>
+
+                  <small>Perfil: <?php echo currentUserPerfil(); ?></small>
+                </p>
+              </li>
+              <li class="user-footer">
+                <a href="/admin/logout" class="btn btn-danger btn-flat float-end">Sair</a>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </nav>
+
+    <aside class="app-sidebar bg-body-secondary" data-bs-theme="light">
+      <div class="sidebar-brand">
+        <a href="/admin" class="brand-link">
+          <img src="/res/admin/dist/assets/img/AdminLTELogo.png" alt="Logo" class="brand-image opacity-75 shadow-sm" />
+          <span class="brand-text fw-semibold">Portal de Relatórios</span>
+        </a>
+      </div>
+
+      <div class="sidebar-wrapper">
+        <nav class="mt-2">
+          <ul class="nav sidebar-menu flex-column" data-lte-toggle="treeview" role="menu" data-accordion="false">
+            <li class="nav-header">Painel</li>
+            <?php if( canAccess('DASHBOARD_VIEW') ){ ?>
+
+            <li class="nav-item"><a href="/admin" class="nav-link"><i class="nav-icon bi bi-speedometer2"></i><p>Dashboard</p></a></li>
+            <?php } ?>
+
+
+            <li class="nav-header">Cadastros</li>
+            <?php if( canAccess('FUNCIONARIOS_VIEW') ){ ?>
+
+            <li class="nav-item"><a href="/admin/funcionarios" class="nav-link"><i class="nav-icon bi bi-people"></i><p>Funcionários</p></a></li>
+            <?php } ?>
+
+
+            <li class="nav-header">Relatórios</li>
+            <?php if( canAccess('DASHBOARD_VIEW') ){ ?>
+
+            <li class="nav-item"><a href="/admin/analise-inteligente" class="nav-link"><i class="nav-icon bi bi-graph-up-arrow"></i><p>Análise Inteligente</p></a></li>
+            <li class="nav-item"><a href="/admin/relatorio/pdf/historico" class="nav-link"><i class="nav-icon bi bi-file-earmark-pdf"></i><p>Histórico PDF</p></a></li>
+            <li class="nav-item"><a href="/admin/relatorio/planilha" class="nav-link"><i class="nav-icon bi bi-file-earmark-excel"></i><p>Planilha mensal</p></a></li>
+            <li class="nav-item"><a href="/admin/consulta-unificada" class="nav-link"><i class="nav-icon bi bi-diagram-3"></i><p>Consulta unificada</p></a></li>
+            <?php } ?>
+
+
+            <?php if( canAnyAccess(['ACL_PROFILES_MANAGE','USUARIOS_SECURITY_MANAGE','ACL_DENIED_VIEW','AUDITORIA_VIEW']) ){ ?>
+
+            <li class="nav-header">Segurança</li>
+            <?php } ?>
+
+            <?php if( canAccess('ACL_PROFILES_MANAGE') ){ ?>
+
+            <li class="nav-item"><a href="/admin/seguranca/permissoes" class="nav-link"><i class="nav-icon bi bi-shield-lock"></i><p>Permissões</p></a></li>
+            <?php } ?>
+
+            <?php if( canAccess('USUARIOS_SECURITY_MANAGE') ){ ?>
+
+            <li class="nav-item"><a href="/admin/usuarios/seguranca" class="nav-link"><i class="nav-icon bi bi-person-lock"></i><p>Usuários e status</p></a></li>
+            <?php } ?>
+
+            <?php if( canAccess('ACL_DENIED_VIEW') ){ ?>
+
+            <li class="nav-item"><a href="/admin/seguranca/acessos-negados" class="nav-link"><i class="nav-icon bi bi-ban"></i><p>Acessos negados</p></a></li>
+            <?php } ?>
+
+            <?php if( canAccess('AUDITORIA_VIEW') ){ ?>
+
+            <li class="nav-item"><a href="/admin/seguranca/auditoria" class="nav-link"><i class="nav-icon bi bi-clock-history"></i><p>Auditoria</p></a></li>
+            <?php } ?>
+
+          </ul>
+        </nav>
+      </div>
+    </aside>

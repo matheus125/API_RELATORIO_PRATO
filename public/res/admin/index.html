@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel Premium | Portal de Relatórios</title>
+  <meta name="description" content="Página estática premium do Portal de Relatórios." />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/source-sans-3@5.0.12/index.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="dist/css/adminlte.css" />
+  <style>
+    :root {
+      --portal-primary: #0d6efd;
+      --portal-primary-dark: #0b57d0;
+      --portal-soft: #eaf2ff;
+      --portal-ink: #0f172a;
+      --portal-muted: #64748b;
+      --portal-bg: #f4f7fb;
+      --portal-card-shadow: 0 16px 40px rgba(15, 23, 42, .08);
+      --portal-radius: 22px;
+    }
+    body {
+      font-family: "Source Sans 3", Arial, sans-serif;
+      background: linear-gradient(180deg, #f8fbff 0%, var(--portal-bg) 100%);
+      color: var(--portal-ink);
+    }
+    .portal-navbar {
+      background: rgba(255,255,255,.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(148,163,184,.14);
+    }
+    .portal-hero {
+      border-radius: 28px;
+      background: linear-gradient(135deg, var(--portal-primary) 0%, #2d74ff 55%, #67a1ff 100%);
+      color: #fff;
+      padding: 1.6rem;
+      box-shadow: var(--portal-card-shadow);
+      position: relative;
+      overflow: hidden;
+    }
+    .portal-hero::before, .portal-hero::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      background: rgba(255,255,255,.10);
+    }
+    .portal-hero::before { width: 240px; height: 240px; top: -90px; right: -70px; }
+    .portal-hero::after { width: 180px; height: 180px; bottom: -80px; right: 120px; }
+    .portal-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      background: rgba(255,255,255,.14);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 999px;
+      padding: .5rem .9rem;
+      margin-bottom: 1rem;
+      font-weight: 800;
+    }
+    .portal-card {
+      border-radius: var(--portal-radius);
+      border: 1px solid rgba(219,229,240,.95);
+      box-shadow: var(--portal-card-shadow);
+    }
+    .metric-box {
+      border-radius: 20px;
+      padding: 1.2rem;
+      color: #fff;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+    .metric-box::after {
+      content: "";
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.10);
+      right: -24px;
+      top: -24px;
+    }
+    .metric-box.primary { background: linear-gradient(135deg, #0d6efd, #4f8fff); }
+    .metric-box.success { background: linear-gradient(135deg, #198754, #37b26f); }
+    .metric-box.warning { background: linear-gradient(135deg, #f59e0b, #f7b940); }
+    .metric-box.danger { background: linear-gradient(135deg, #dc3545, #f26a76); }
+    .metric-box h3 { font-size: 2rem; margin: 0; font-weight: 900; }
+    .metric-box p { margin: .3rem 0 0; opacity: .95; }
+    .surface {
+      background: #fff;
+      border-radius: var(--portal-radius);
+      border: 1px solid rgba(219,229,240,.95);
+      box-shadow: var(--portal-card-shadow);
+    }
+    .list-clean li + li { border-top: 1px solid #eef2f7; }
+    .list-clean li { padding: .9rem 0; }
+    @media (max-width: 767.98px) {
+      .portal-hero { padding: 1.2rem; border-radius: 22px; }
+    }
+  </style>
+</head>
+<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+  <nav class="navbar navbar-expand-lg portal-navbar sticky-top">
+    <div class="container-fluid px-4">
+      <a class="navbar-brand fw-bold" href="#"><i class="bi bi-bar-chart-line-fill text-primary me-2"></i>Portal de Relatórios</a>
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <span class="badge text-bg-primary rounded-pill px-3 py-2"><i class="bi bi-buildings me-1"></i> Governo do Estado do Amazonas</span>
+        <a href="login-v2.html" class="btn btn-outline-primary rounded-pill px-3">Login demo</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container-fluid px-4 py-4">
+    <section class="portal-hero mb-4">
+      <div class="portal-kicker"><i class="bi bi-stars"></i> Visual institucional premium</div>
+      <div class="row align-items-center g-3">
+        <div class="col-lg-8">
+          <h1 class="display-5 fw-bold mb-2">Painel estático do Portal de Relatórios</h1>
+          <p class="mb-0 fs-5" style="max-width:860px;opacity:.92;">Esta página substitui a demo original do AdminLTE por uma referência visual alinhada ao sistema real, útil para módulos auxiliares, páginas públicas e futuras expansões do projeto.</p>
+        </div>
+        <div class="col-lg-4 text-lg-end">
+          <a href="../../admin" class="btn btn-light text-primary fw-bold rounded-pill px-4 py-2 me-2 mb-2 mb-lg-0"><i class="bi bi-arrow-up-right-circle me-1"></i>Abrir sistema</a>
+          <a href="login-v2.html" class="btn btn-outline-light fw-bold rounded-pill px-4 py-2"><i class="bi bi-shield-lock me-1"></i>Login premium</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="row g-3 mb-4">
+      <div class="col-12 col-md-6 col-xl-3"><div class="metric-box primary"><div class="small text-uppercase fw-bold">Operação</div><h3>24</h3><p>Módulos disponíveis</p></div></div>
+      <div class="col-12 col-md-6 col-xl-3"><div class="metric-box success"><div class="small text-uppercase fw-bold">Segurança</div><h3>100%</h3><p>Layout padronizado</p></div></div>
+      <div class="col-12 col-md-6 col-xl-3"><div class="metric-box warning"><div class="small text-uppercase fw-bold">Experiência</div><h3>Mobile</h3><p>Uso fluido em telas menores</p></div></div>
+      <div class="col-12 col-md-6 col-xl-3"><div class="metric-box danger"><div class="small text-uppercase fw-bold">Branding</div><h3>Gov</h3><p>Identidade institucional aplicada</p></div></div>
+    </section>
+
+    <section class="row g-4">
+      <div class="col-xl-8">
+        <div class="surface p-4 h-100">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div>
+              <h2 class="h4 fw-bold mb-1">Resumo da evolução visual</h2>
+              <p class="text-muted mb-0">Estrutura base para dashboards, relatórios, segurança e páginas públicas.</p>
+            </div>
+            <span class="badge rounded-pill text-bg-light border px-3 py-2">Padrão Portal de Relatórios</span>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2"><i class="bi bi-check2-circle text-primary me-2"></i>O que foi unificado</div>
+                <ul class="mb-0 text-muted">
+                  <li>Header, sidebar e rodapé</li>
+                  <li>Dashboard institucional</li>
+                  <li>Cadastros e segurança</li>
+                  <li>Páginas estáticas auxiliares</li>
+                </ul>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2"><i class="bi bi-phone text-primary me-2"></i>Ganhos principais</div>
+                <ul class="mb-0 text-muted">
+                  <li>Melhor leitura no celular</li>
+                  <li>Botões e tabelas responsivos</li>
+                  <li>Visual premium consistente</li>
+                  <li>Menos aparência de sistema genérico</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-xl-4">
+        <div class="surface p-4 h-100">
+          <h2 class="h5 fw-bold mb-3">Próximos usos</h2>
+          <ul class="list-unstyled list-clean mb-0">
+            <li><strong class="d-block">Páginas públicas</strong><span class="text-muted">Base visual pronta para módulos externos e landing pages.</span></li>
+            <li><strong class="d-block">Documentação interna</strong><span class="text-muted">Pode servir como referência para novos componentes.</span></li>
+            <li><strong class="d-block">Novos dashboards</strong><span class="text-muted">Estrutura compatível com gráficos, cards e filtros.</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

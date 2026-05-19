@@ -1,0 +1,1030 @@
+<style>
+  .planilha-page {
+    padding: 18px 18px 28px;
+  }
+
+  .planilha-wrap {
+    max-width: 1320px;
+    margin: 0 auto;
+  }
+
+  .planilha-hero {
+    background: radial-gradient(circle at top right, rgba(25, 135, 84, 0.12), transparent 180px), linear-gradient(135deg, #ffffff 0%, #f7fbf8 100%);
+    border: 1px solid #e6edf2;
+    border-radius: 24px;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+    padding: 28px;
+    margin-bottom: 22px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .planilha-hero:after {
+    content: "";
+    position: absolute;
+    top: -44px;
+    right: -36px;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: rgba(25, 135, 84, 0.08);
+  }
+
+  .planilha-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    position: relative;
+    z-index: 1;
+    flex-wrap: wrap;
+  }
+
+  .planilha-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #e8f7ee;
+    color: #198754;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 14px;
+  }
+
+  .planilha-title {
+    margin: 0;
+    font-size: clamp(2rem, 2.8vw, 2.8rem);
+    line-height: 1.05;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .planilha-subtitle {
+    max-width: 860px;
+    margin: 14px 0 0;
+    color: #64748b;
+    font-size: 1.05rem;
+  }
+
+  .planilha-hero .btn {
+    border-radius: 16px;
+    padding: 12px 20px;
+    font-weight: 700;
+    min-width: 126px;
+  }
+
+  .planilha-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 22px;
+  }
+
+  .summary-card {
+    background: #ffffff;
+    border: 1px solid #e6edf2;
+    border-radius: 20px;
+    padding: 18px 18px 16px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+    min-height: 128px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .summary-card:before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #198754, #64c18a);
+  }
+
+  .summary-label {
+    color: #64748b;
+    font-size: 0.92rem;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .summary-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1;
+    margin: 0 0 10px;
+  }
+
+  .summary-meta {
+    color: #64748b;
+    font-size: 0.88rem;
+  }
+
+  .planilha-main-grid,
+  .planilha-bottom-grid {
+    display: grid;
+    gap: 22px;
+  }
+
+  .planilha-main-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(320px, 1.05fr);
+    margin-bottom: 22px;
+  }
+
+  .planilha-bottom-grid {
+    grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr);
+    align-items: start;
+  }
+
+  .planilha-side-stack {
+    display: grid;
+    gap: 22px;
+  }
+
+  .planilha-card {
+    background: #ffffff;
+    border: 1px solid #e6edf2;
+    border-radius: 24px;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.05);
+    overflow: hidden;
+  }
+
+  .planilha-card-header {
+    padding: 20px 22px;
+    border-bottom: 1px solid #edf2f7;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .planilha-card-title {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .planilha-card-subtitle {
+    margin: 6px 0 0;
+    color: #64748b;
+    font-size: 0.95rem;
+  }
+
+  .planilha-card-body {
+    padding: 22px;
+  }
+
+  .planilha-form-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .planilha-metrics-mini {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .mini-metric {
+    border: 1px solid #e7edf3;
+    border-radius: 18px;
+    padding: 16px;
+    background: linear-gradient(180deg, #fbfdfc 0%, #f7faf9 100%);
+  }
+
+  .mini-metric-label {
+    color: #64748b;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 6px;
+  }
+
+  .mini-metric-value {
+    color: #0f172a;
+    font-size: 1.05rem;
+    font-weight: 800;
+  }
+
+  .planilha-form .form-label {
+    font-weight: 700;
+    color: #334155;
+    margin-bottom: 7px;
+  }
+
+  .planilha-form .form-control,
+  .planilha-form .form-select {
+    min-height: 52px;
+    border-radius: 16px;
+    border: 1px solid #d7e0e8;
+    box-shadow: none;
+    font-size: 1rem;
+  }
+
+  .planilha-form .form-control:focus,
+  .planilha-form .form-select:focus {
+    border-color: #198754;
+    box-shadow: 0 0 0 .22rem rgba(25, 135, 84, 0.12);
+  }
+
+  .planilha-tip {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    border: 1px dashed #d6e4dd;
+    background: #f8fcf9;
+    border-radius: 18px;
+    padding: 16px;
+    color: #536476;
+    margin-bottom: 14px;
+  }
+
+  .planilha-tip i {
+    color: #198754;
+    font-size: 1.2rem;
+    margin-top: 2px;
+  }
+
+  .planilha-submit {
+    width: 100%;
+    min-height: 56px;
+    border-radius: 18px;
+    border: none;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 1.03rem;
+    background: linear-gradient(135deg, #198754, #157347);
+    box-shadow: 0 14px 28px rgba(25, 135, 84, 0.22);
+    transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease;
+  }
+
+  .planilha-submit:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 34px rgba(25, 135, 84, 0.26);
+  }
+
+  .planilha-submit:disabled {
+    opacity: .7;
+    cursor: not-allowed;
+  }
+
+  .rules-list,
+  .ranking-list,
+  .history-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .rules-item,
+  .history-item {
+    display: flex;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid #eef2f7;
+  }
+
+  .rules-item:last-child,
+  .history-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .rules-item:first-child,
+  .history-item:first-child {
+    padding-top: 0;
+  }
+
+  .icon-bullet {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    flex: 0 0 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #edf4ff;
+    color: #4462ff;
+    font-size: 0.95rem;
+  }
+
+  .planilha-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #e8f7ee;
+    color: #198754;
+    padding: 10px 14px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: .92rem;
+    margin-bottom: 14px;
+  }
+
+  .planilha-alert-inline {
+    margin-top: 16px;
+    border-radius: 18px;
+    padding: 15px 16px;
+    border: 1px solid #f4d27b;
+    background: #fff8e7;
+    color: #9a5a00;
+  }
+
+  .planilha-modelo {
+    margin-top: 16px;
+    display: block;
+    background: #0f172a;
+    color: #f8fafc;
+    border-radius: 18px;
+    padding: 15px 16px;
+    font-size: .92rem;
+    word-break: break-word;
+  }
+
+  .chart-shell {
+    height: 360px;
+    position: relative;
+  }
+
+  .chart-empty,
+  .empty-state {
+    display: grid;
+    place-items: center;
+    min-height: 240px;
+    border: 1px dashed #d9e2ec;
+    border-radius: 18px;
+    color: #64748b;
+    background: #fbfdff;
+    text-align: center;
+    padding: 20px;
+  }
+
+  .ranking-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #eef2f7;
+  }
+
+  .ranking-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .ranking-pos {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    background: #eef8f2;
+    color: #198754;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ranking-name {
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 2px;
+  }
+
+  .ranking-meta,
+  .history-meta {
+    color: #64748b;
+    font-size: .88rem;
+  }
+
+  .ranking-value {
+    font-weight: 800;
+    color: #0f172a;
+    text-align: right;
+  }
+
+  .history-title {
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 4px;
+    word-break: break-word;
+  }
+
+  .history-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .btn-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid #d7e0e8;
+    background: #ffffff;
+    color: #0f172a;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all .18s ease;
+  }
+
+  .btn-chip:hover {
+    border-color: #198754;
+    color: #198754;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    font-weight: 800;
+  }
+
+  .status-ok { background: #e8f7ee; color: #198754; }
+  .status-local { background: #edf4ff; color: #3559d5; }
+  .status-warning { background: #fff4db; color: #9a5a00; }
+
+  .toast-stack {
+    position: fixed;
+    top: 86px;
+    right: 18px;
+    z-index: 1080;
+    display: grid;
+    gap: 10px;
+    max-width: 360px;
+  }
+
+  .toast-planilha {
+    background: #0f172a;
+    color: #fff;
+    padding: 14px 16px;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.24);
+    animation: slideToast .22s ease;
+  }
+
+  .toast-planilha.success { background: #166534; }
+  .toast-planilha.error { background: #9f1239; }
+  .toast-planilha.info { background: #0f172a; }
+
+  @keyframes slideToast {
+    from { opacity: 0; transform: translateY(-8px) translateX(8px); }
+    to { opacity: 1; transform: translateY(0) translateX(0); }
+  }
+
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: #edf2f7 !important;
+    color: transparent !important;
+  }
+
+  .skeleton * {
+    visibility: hidden !important;
+  }
+
+  .skeleton:after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.8), transparent);
+    animation: skeleton-shimmer 1.25s infinite;
+  }
+
+  @keyframes skeleton-shimmer {
+    100% { transform: translateX(100%); }
+  }
+
+  @media (max-width: 1199.98px) {
+    .planilha-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .planilha-main-grid,
+    .planilha-bottom-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 767.98px) {
+    .planilha-page { padding: 10px 10px 22px; }
+    .planilha-hero,
+    .planilha-card-body,
+    .planilha-card-header { padding-left: 16px; padding-right: 16px; }
+    .planilha-summary-grid,
+    .planilha-form-grid,
+    .planilha-metrics-mini { grid-template-columns: 1fr; }
+    .summary-value { font-size: 1.7rem; }
+    .chart-shell { height: 300px; }
+  }
+</style>
+
+<section class="content planilha-page">
+  <div class="planilha-wrap">
+    <div class="toast-stack" id="planilhaToastStack"></div>
+
+    <div class="planilha-hero">
+      <div class="planilha-topbar">
+        <div>
+          <div class="planilha-kicker"><i class="bi bi-file-earmark-excel"></i> Exportação mensal inteligente</div>
+          <h1 class="planilha-title">Relatório em planilha</h1>
+          <p class="planilha-subtitle">Gere o Excel mensal com dados reais da <code>tb_relatorios</code>, cards de desempenho, gráfico dinâmico, histórico persistente e fluxo de exportação sem recarregar a página.</p>
+        </div>
+        <a href="/admin" class="btn btn-light border"><i class="bi bi-arrow-left"></i> Voltar</a>
+      </div>
+    </div>
+
+    <div class="planilha-summary-grid" id="planilhaSummaryGrid">
+      <div class="summary-card" data-summary-card>
+        <div class="summary-label">Dias do mês</div>
+        <div class="summary-value" id="summaryDiasMes">--</div>
+        <div class="summary-meta" id="summaryDiasMesMeta">Calendário do período</div>
+      </div>
+      <div class="summary-card" data-summary-card>
+        <div class="summary-label">Dias fechados</div>
+        <div class="summary-value" id="summaryDiasFechados">--</div>
+        <div class="summary-meta" id="summaryDiasFechadosMeta">Taxa de fechamento --</div>
+      </div>
+      <div class="summary-card" data-summary-card>
+        <div class="summary-label">Total de refeições</div>
+        <div class="summary-value" id="summaryRefeicoes">--</div>
+        <div class="summary-meta" id="summaryRefeicoesMeta">Média diária --</div>
+      </div>
+      <div class="summary-card" data-summary-card>
+        <div class="summary-label">Total de pessoas</div>
+        <div class="summary-value" id="summaryPessoas">--</div>
+        <div class="summary-meta" id="summaryPessoasMeta">Unidades ativas --</div>
+      </div>
+    </div>
+
+    <div class="planilha-main-grid">
+      <div class="planilha-card">
+        <div class="planilha-card-header">
+          <div>
+            <h3 class="planilha-card-title"><i class="bi bi-sliders2 me-2 text-success"></i>Gerar arquivo</h3>
+            <p class="planilha-card-subtitle">Selecione o período, acompanhe os indicadores e baixe a planilha pronta sem sair da tela.</p>
+          </div>
+        </div>
+        <div class="planilha-card-body">
+          <div class="planilha-metrics-mini">
+            <div class="mini-metric"><div class="mini-metric-label">Formato</div><div class="mini-metric-value">Excel (.xlsx)</div></div>
+            <div class="mini-metric"><div class="mini-metric-label">Origem</div><div class="mini-metric-value">tb_relatorios</div></div>
+            <div class="mini-metric"><div class="mini-metric-label">Processo</div><div class="mini-metric-value">Automático</div></div>
+          </div>
+
+          <form id="planilhaForm" class="planilha-form">
+            <div class="planilha-form-grid">
+              <div>
+                <label class="form-label" for="planilhaAno">Ano</label>
+                <input type="number" id="planilhaAno" name="ano" class="form-control" min="2020" max="2100" value="{if="$filtros.ano"}{$filtros.ano}{else}{function="date('Y')"}{/if}" required>
+              </div>
+              <div>
+                <label class="form-label" for="planilhaMes">Mês</label>
+                <select id="planilhaMes" name="mes" class="form-select" required>
+                  <option value="1" {if="$filtros.mes == 1"}selected{/if}>1 - Janeiro</option>
+                  <option value="2" {if="$filtros.mes == 2"}selected{/if}>2 - Fevereiro</option>
+                  <option value="3" {if="$filtros.mes == 3"}selected{/if}>3 - Março</option>
+                  <option value="4" {if="$filtros.mes == 4"}selected{/if}>4 - Abril</option>
+                  <option value="5" {if="$filtros.mes == 5"}selected{/if}>5 - Maio</option>
+                  <option value="6" {if="$filtros.mes == 6"}selected{/if}>6 - Junho</option>
+                  <option value="7" {if="$filtros.mes == 7"}selected{/if}>7 - Julho</option>
+                  <option value="8" {if="$filtros.mes == 8"}selected{/if}>8 - Agosto</option>
+                  <option value="9" {if="$filtros.mes == 9"}selected{/if}>9 - Setembro</option>
+                  <option value="10" {if="$filtros.mes == 10"}selected{/if}>10 - Outubro</option>
+                  <option value="11" {if="$filtros.mes == 11"}selected{/if}>11 - Novembro</option>
+                  <option value="12" {if="$filtros.mes == 12"}selected{/if}>12 - Dezembro</option>
+                </select>
+              </div>
+              <div>
+                <label class="form-label" for="planilhaFiltro">Filtro</label>
+                <select id="planilhaFiltro" name="somente_fechados" class="form-select">
+                  <option value="1" {if="$filtros.somente_fechados == 1"}selected{/if}>Somente fechados</option>
+                  <option value="0" {if="$filtros.somente_fechados == 0"}selected{/if}>Todos os registros</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="planilha-tip">
+              <i class="bi bi-lightning-charge"></i>
+              <div>A exportação usa o modelo mensal configurado no sistema, salva o arquivo no histórico interno e libera o download imediatamente pela interface.</div>
+            </div>
+
+            <button type="submit" class="planilha-submit" id="btnGerarPlanilha" {if="!$can_exportar"}disabled{/if}>
+              <span id="btnGerarPlanilhaText"><i class="bi bi-download"></i> Gerar e baixar planilha</span>
+            </button>
+            {if="!$can_exportar"}
+            <div class="alert alert-warning mt-3 mb-0" style="border-radius:16px;">Seu perfil pode visualizar o painel, mas não está liberado para gerar/exportar arquivos. Ative a permissão <strong>PLANILHA_EXPORT</strong> em Segurança &gt; Permissões.</div>
+            {/if}
+          </form>
+        </div>
+      </div>
+
+      <div class="planilha-card">
+        <div class="planilha-card-header">
+          <div>
+            <h3 class="planilha-card-title"><i class="bi bi-info-circle me-2 text-success"></i>Regras do preenchimento</h3>
+            <p class="planilha-card-subtitle">Informações importantes antes de gerar o arquivo.</p>
+          </div>
+        </div>
+        <div class="planilha-card-body">
+          <div class="planilha-badge"><i class="bi bi-check-circle"></i> Excel mensal automático</div>
+          <ul class="rules-list">
+            <li class="rules-item"><span class="icon-bullet"><i class="bi bi-calendar3"></i></span><div>A rotina usa a aba do mês selecionado e preenche automaticamente os dias nas colunas da planilha modelo.</div></li>
+            <li class="rules-item"><span class="icon-bullet"><i class="bi bi-building"></i></span><div>A unidade é localizada pelo campo <strong>nome_banco</strong> e a data é identificada pelo campo <strong>data</strong>.</div></li>
+            <li class="rules-item"><span class="icon-bullet"><i class="bi bi-funnel"></i></span><div>O filtro permite exportar apenas registros fechados ou considerar todos os registros do período selecionado.</div></li>
+          </ul>
+          <div class="planilha-alert-inline"><strong>Observação:</strong> a linha <strong>Novos cadastros</strong> continua sendo exportada com valor <strong>0</strong>, porque a tabela atual não possui essa coluna.</div>
+          <strong class="d-block mt-3 text-dark">Modelo utilizado</strong>
+          <span class="planilha-modelo">/public/res/admin/excel/resultados_alcancados_2026_modelo.xlsx</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="planilha-bottom-grid">
+      <div class="planilha-card">
+        <div class="planilha-card-header">
+          <div>
+            <h3 class="planilha-card-title"><i class="bi bi-bar-chart me-2 text-success"></i>Desempenho mensal por dia</h3>
+            <p class="planilha-card-subtitle">Comparativo das refeições e pessoas atendidas ao longo do mês selecionado.</p>
+          </div>
+          <span class="status-pill status-local" id="chartStatusPill">Atualizando painel</span>
+        </div>
+        <div class="planilha-card-body">
+          <div class="chart-shell" id="chartShell">
+            <canvas id="planilhaChart"></canvas>
+            <div class="chart-empty d-none" id="chartEmpty">Sem dados suficientes para montar o gráfico deste período.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="planilha-side-stack">
+        <div class="planilha-card">
+          <div class="planilha-card-header">
+            <div>
+              <h3 class="planilha-card-title"><i class="bi bi-trophy me-2 text-success"></i>Ranking das unidades</h3>
+              <p class="planilha-card-subtitle">Top unidades por volume de refeições no mês.</p>
+            </div>
+          </div>
+          <div class="planilha-card-body">
+            <ul class="ranking-list" id="rankingList"></ul>
+          </div>
+        </div>
+
+        <div class="planilha-card">
+          <div class="planilha-card-header">
+            <div>
+              <h3 class="planilha-card-title"><i class="bi bi-clock-history me-2 text-success"></i>Últimas planilhas</h3>
+              <p class="planilha-card-subtitle">Histórico salvo no sistema para download rápido.</p>
+            </div>
+          </div>
+          <div class="planilha-card-body">
+            <ul class="history-list" id="historyList"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function () {
+  const state = {
+    chart: null,
+    loading: false,
+    canExport: {if="$can_exportar"}true{else}false{/if},
+  };
+
+  const els = {
+    form: document.getElementById('planilhaForm'),
+    ano: document.getElementById('planilhaAno'),
+    mes: document.getElementById('planilhaMes'),
+    filtro: document.getElementById('planilhaFiltro'),
+    btn: document.getElementById('btnGerarPlanilha'),
+    btnText: document.getElementById('btnGerarPlanilhaText'),
+    toastStack: document.getElementById('planilhaToastStack'),
+    summaryCards: Array.from(document.querySelectorAll('[data-summary-card]')),
+    summaryDiasMes: document.getElementById('summaryDiasMes'),
+    summaryDiasMesMeta: document.getElementById('summaryDiasMesMeta'),
+    summaryDiasFechados: document.getElementById('summaryDiasFechados'),
+    summaryDiasFechadosMeta: document.getElementById('summaryDiasFechadosMeta'),
+    summaryRefeicoes: document.getElementById('summaryRefeicoes'),
+    summaryRefeicoesMeta: document.getElementById('summaryRefeicoesMeta'),
+    summaryPessoas: document.getElementById('summaryPessoas'),
+    summaryPessoasMeta: document.getElementById('summaryPessoasMeta'),
+    chartCanvas: document.getElementById('planilhaChart'),
+    chartEmpty: document.getElementById('chartEmpty'),
+    chartStatusPill: document.getElementById('chartStatusPill'),
+    rankingList: document.getElementById('rankingList'),
+    historyList: document.getElementById('historyList')
+  };
+
+  const fmtInt = new Intl.NumberFormat('pt-BR');
+
+  function showToast(message, type = 'info') {
+    if (!els.toastStack) return;
+    const div = document.createElement('div');
+    div.className = `toast-planilha ${type}`;
+    div.textContent = message;
+    els.toastStack.appendChild(div);
+    window.setTimeout(() => {
+      div.style.opacity = '0';
+      div.style.transform = 'translateY(-6px)';
+      window.setTimeout(() => div.remove(), 220);
+    }, 3600);
+  }
+
+  function setSummaryLoading(active) {
+    els.summaryCards.forEach(card => {
+      card.classList.toggle('skeleton', active);
+    });
+    if (active) {
+      els.rankingList.innerHTML = '<div class="empty-state skeleton" style="min-height:180px;">Carregando ranking...</div>';
+      els.historyList.innerHTML = '<div class="empty-state skeleton" style="min-height:180px;">Carregando histórico...</div>';
+      els.chartStatusPill.textContent = 'Atualizando painel';
+      els.chartStatusPill.className = 'status-pill status-local';
+    }
+  }
+
+  function getFilters() {
+    return {
+      ano: Number(els.ano.value || 0),
+      mes: Number(els.mes.value || 0),
+      somente_fechados: Number(els.filtro.value || 0)
+    };
+  }
+
+  function buildQuery(params) {
+    return new URLSearchParams(params).toString();
+  }
+
+  async function fetchPainel() {
+    setSummaryLoading(true);
+    try {
+      const response = await fetch(`/admin/api/relatorio/planilha/painel?${buildQuery(getFilters())}`, {
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Falha ao carregar o painel.');
+      }
+      renderPainel(data.data || {});
+    } catch (error) {
+      renderPainel({});
+      showToast(error.message || 'Não foi possível atualizar a planilha.', 'error');
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
+
+  function renderPainel(data) {
+    const resumo = data.resumo || {};
+    els.summaryDiasMes.textContent = fmtInt.format(Number(resumo.total_dias_mes || 0));
+    els.summaryDiasMesMeta.textContent = `${fmtInt.format(Number(resumo.dias_com_registros || 0))} dia(s) com registros no período`;
+
+    els.summaryDiasFechados.textContent = fmtInt.format(Number(resumo.dias_fechados || 0));
+    els.summaryDiasFechadosMeta.textContent = `Taxa de fechamento ${Number(resumo.taxa_fechamento || 0).toLocaleString('pt-BR')}%`;
+
+    els.summaryRefeicoes.textContent = fmtInt.format(Number(resumo.total_refeicoes || 0));
+    els.summaryRefeicoesMeta.textContent = `Média diária ${fmtInt.format(Number(resumo.media_refeicoes || 0))}`;
+
+    els.summaryPessoas.textContent = fmtInt.format(Number(resumo.total_pessoas || 0));
+    els.summaryPessoasMeta.textContent = `${fmtInt.format(Number(resumo.unidades_ativas || 0))} unidade(s) ativas`;
+
+    renderChart(data.grafico || {});
+    renderRanking(data.ranking || []);
+    renderHistory(data.historico || []);
+
+    const semDados = Number(resumo.dias_com_registros || 0) === 0;
+    els.chartStatusPill.textContent = semDados ? 'Sem dados no período' : 'Painel sincronizado';
+    els.chartStatusPill.className = `status-pill ${semDados ? 'status-warning' : 'status-ok'}`;
+  }
+
+  function renderChart(grafico) {
+    const labels = Array.isArray(grafico.labels) ? grafico.labels : [];
+    const refeicoes = Array.isArray(grafico.refeicoes) ? grafico.refeicoes : [];
+    const pessoas = Array.isArray(grafico.pessoas) ? grafico.pessoas : [];
+    const hasData = refeicoes.some(v => Number(v) > 0) || pessoas.some(v => Number(v) > 0);
+
+    if (state.chart && typeof state.chart.destroy === 'function') {
+      state.chart.destroy();
+      state.chart = null;
+    }
+
+    if (!hasData || typeof Chart === 'undefined') {
+      els.chartCanvas.classList.add('d-none');
+      els.chartEmpty.classList.remove('d-none');
+      return;
+    }
+
+    els.chartCanvas.classList.remove('d-none');
+    els.chartEmpty.classList.add('d-none');
+
+    state.chart = new Chart(els.chartCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Refeições',
+            data: refeicoes,
+            borderColor: '#198754',
+            backgroundColor: 'rgba(25, 135, 84, 0.12)',
+            fill: true,
+            tension: 0.3,
+            borderWidth: 3,
+            pointRadius: 2.5,
+            pointHoverRadius: 4,
+          },
+          {
+            label: 'Pessoas',
+            data: pessoas,
+            borderColor: '#3559d5',
+            backgroundColor: 'rgba(53, 89, 213, 0.10)',
+            fill: true,
+            tension: 0.28,
+            borderWidth: 2,
+            pointRadius: 2,
+            pointHoverRadius: 4,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        animation: { duration: 700, easing: 'easeOutQuart' },
+        plugins: {
+          legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, color: '#334155' } },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            padding: 12,
+            cornerRadius: 12,
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: '#64748b' }
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(148, 163, 184, 0.18)' },
+            ticks: { color: '#64748b' }
+          }
+        }
+      }
+    });
+  }
+
+  function renderRanking(items) {
+    if (!items.length) {
+      els.rankingList.innerHTML = '<div class="empty-state">Nenhuma unidade encontrada para o período selecionado.</div>';
+      return;
+    }
+
+    els.rankingList.innerHTML = items.map((item, index) => `
+      <li class="ranking-item">
+        <span class="ranking-pos">${index + 1}</span>
+        <div>
+          <div class="ranking-name">${escapeHtml(item.unidade || 'Sem unidade')}</div>
+          <div class="ranking-meta">${fmtInt.format(Number(item.pessoas || 0))} pessoas • ${fmtInt.format(Number(item.fechados || 0))} fechamento(s)</div>
+        </div>
+        <div class="ranking-value">${fmtInt.format(Number(item.refeicoes || 0))}<div class="ranking-meta">refeições</div></div>
+      </li>
+    `).join('');
+  }
+
+  function statusClass(status) {
+    const norm = String(status || '').toUpperCase();
+    if (norm.includes('GERADO') || norm.includes('SUCESSO')) return 'status-ok';
+    if (norm.includes('LOCAL')) return 'status-local';
+    return 'status-warning';
+  }
+
+  function renderHistory(items) {
+    if (!items.length) {
+      els.historyList.innerHTML = '<div class="empty-state">Ainda não existe histórico de planilhas salvas para download rápido.</div>';
+      return;
+    }
+
+    els.historyList.innerHTML = items.map(item => {
+      const status = item.status_upload || 'LOCAL';
+      const dateRef = formatDateTime(item.data_geracao || item.data_upload || item.data_relatorio);
+      const downloadUrl = item.download_url || '#';
+      const canDownload = Boolean(downloadUrl && downloadUrl !== '#') && state.canExport;
+      return `
+        <li class="history-item">
+          <span class="icon-bullet"><i class="bi bi-filetype-xlsx"></i></span>
+          <div style="flex:1; min-width:0;">
+            <div class="history-title">${escapeHtml(item.nome_arquivo || 'Arquivo sem nome')}</div>
+            <div class="history-meta">${dateRef} ${item.responsavel ? '• ' + escapeHtml(item.responsavel) : ''}</div>
+            <div class="history-actions">
+              <span class="status-pill ${statusClass(status)}">${escapeHtml(status)}</span>
+              ${canDownload ? `<a class="btn-chip" href="${downloadUrl}"><i class="bi bi-download"></i> Baixar novamente</a>` : ''}
+            </div>
+          </div>
+        </li>
+      `;
+    }).join('');
+  }
+
+  async function gerarPlanilha(event) {
+    event.preventDefault();
+    if (!state.canExport) {
+      showToast('Seu perfil não possui permissão para exportar a planilha.', 'error');
+      return;
+    }
+    if (state.loading) return;
+
+    state.loading = true;
+    els.btn.disabled = true;
+    els.btnText.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Gerando planilha...';
+
+    try {
+      const response = await fetch(`/admin/api/relatorio/planilha/exportar?${buildQuery(getFilters())}`, {
+        headers: {
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      });
+
+      const contentType = String(response.headers.get('content-type') || '');
+      if (!response.ok || contentType.includes('application/json')) {
+        const payload = contentType.includes('application/json') ? await response.json() : { message: await response.text() };
+        throw new Error(payload.message || 'Falha ao gerar a planilha.');
+      }
+
+      const blob = await response.blob();
+      const fileName = getFileNameFromResponse(response) || `relatorio_mensal_${els.ano.value}_${els.mes.value}.xlsx`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast('Planilha gerada com sucesso. Download iniciado.', 'success');
+      fetchPainel();
+    } catch (error) {
+      showToast(error.message || 'Não foi possível gerar a planilha.', 'error');
+    } finally {
+      state.loading = false;
+      els.btn.disabled = !state.canExport;
+      els.btnText.innerHTML = '<i class="bi bi-download"></i> Gerar e baixar planilha';
+    }
+  }
+
+  function getFileNameFromResponse(response) {
+    const disposition = response.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    return match ? match[1] : null;
+  }
+
+  function formatDateTime(value) {
+    if (!value) return 'Data não informada';
+    const normalized = String(value).replace(' ', 'T');
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString('pt-BR');
+  }
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  let changeTimer = null;
+  function scheduleRefresh() {
+    window.clearTimeout(changeTimer);
+    changeTimer = window.setTimeout(fetchPainel, 280);
+  }
+
+  if (els.form) {
+    els.form.addEventListener('submit', gerarPlanilha);
+  }
+  [els.ano, els.mes, els.filtro].forEach(el => {
+    if (el) el.addEventListener('change', scheduleRefresh);
+  });
+
+  fetchPainel();
+})();
+</script>

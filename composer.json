@@ -1,0 +1,24 @@
+{
+    "name": "api/viagem",
+    "authors": [
+        {
+            "name": "MS-SOLUÇÕES EM TECNOLOGIA",
+            "email": "mmota350@gmail.com"
+        }
+    ],
+    "require": {
+    	"slim/slim":"2.0",
+    	"rain/raintpl":"3.0.0",
+        "amadeus4dev/amadeus-php": "^0.3.0",
+        "tecnickcom/tcpdf": "^6.10",
+        "firebase/php-jwt": "^6.11",
+        "phpmailer/phpmailer": "^7.0",
+        "dompdf/dompdf": "^3.1",
+        "phpoffice/phpspreadsheet": "^2.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Hcode\\": "vendor/API/php-classes/src"
+        }
+    }
+}

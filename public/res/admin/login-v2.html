@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login Premium | Portal de Relatórios</title>
+  <meta name="description" content="Acesso institucional ao Portal de Relatórios do Governo do Estado do Amazonas." />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/source-sans-3@5.0.12/index.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="assets/css/bootstrap.min.css" />
+  <style>
+    :root {
+      --portal-primary: #0d6efd;
+      --portal-primary-dark: #0b57d0;
+      --portal-primary-soft: #eaf2ff;
+      --portal-bg-dark: #081224;
+      --portal-bg-dark-2: #0f172a;
+      --portal-text: #f8fbff;
+      --portal-muted: #cbd5e1;
+      --portal-panel: rgba(7, 14, 28, .78);
+      --portal-border: rgba(255,255,255,.10);
+      --portal-radius: 28px;
+      --portal-shadow: 0 24px 60px rgba(2, 6, 23, .45);
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      font-family: "Source Sans 3", Arial, sans-serif;
+      color: var(--portal-text);
+      background:
+        radial-gradient(circle at 10% 20%, rgba(13,110,253,.18), transparent 22%),
+        radial-gradient(circle at 85% 75%, rgba(147,197,253,.14), transparent 22%),
+        linear-gradient(135deg, rgba(2,6,23,.92), rgba(15,23,42,.95)),
+        linear-gradient(120deg, #071120 0%, #0b1730 45%, #10203c 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+    }
+    .portal-shell {
+      width: 100%;
+      max-width: 1180px;
+      display: grid;
+      grid-template-columns: 1.05fr .95fr;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--portal-border);
+      border-radius: var(--portal-radius);
+      overflow: hidden;
+      backdrop-filter: blur(16px);
+      box-shadow: var(--portal-shadow);
+    }
+    .portal-side {
+      background: linear-gradient(160deg, rgba(234,242,255,.98), rgba(255,255,255,.88));
+      color: #0f172a;
+      padding: 54px 48px;
+      position: relative;
+      overflow: hidden;
+    }
+    .portal-side::before, .portal-side::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      background: rgba(13,110,253,.10);
+      filter: blur(4px);
+    }
+    .portal-side::before { width: 260px; height: 260px; right: -80px; top: -80px; }
+    .portal-side::after { width: 220px; height: 220px; left: -80px; bottom: -80px; }
+    .brand-badge {
+      display: inline-flex;
+      gap: .55rem;
+      align-items: center;
+      padding: .55rem 1rem;
+      border-radius: 999px;
+      background: #fff;
+      color: #0b57d0;
+      font-weight: 800;
+      box-shadow: 0 10px 24px rgba(13,110,253,.10);
+      margin-bottom: 1.2rem;
+    }
+    .brand-logo {
+      width: 110px;
+      height: 110px;
+      object-fit: contain;
+      padding: 14px;
+      border-radius: 24px;
+      background: rgba(255,255,255,.72);
+      box-shadow: 0 18px 38px rgba(15,23,42,.08);
+      margin-bottom: 1.5rem;
+    }
+    .brand-title {
+      font-size: clamp(2.2rem, 4vw, 3.6rem);
+      line-height: .98;
+      font-weight: 900;
+      letter-spacing: -.03em;
+      margin: 0 0 .95rem;
+    }
+    .brand-text {
+      font-size: 1.05rem;
+      line-height: 1.8;
+      color: #334155;
+      max-width: 520px;
+      margin-bottom: 2rem;
+    }
+    .brand-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .brand-card {
+      background: rgba(255,255,255,.72);
+      border: 1px solid rgba(255,255,255,.7);
+      border-radius: 20px;
+      padding: 18px 16px;
+      box-shadow: 0 8px 22px rgba(15,23,42,.06);
+    }
+    .brand-card strong { display: block; font-size: 1.35rem; margin-bottom: .25rem; }
+    .portal-form {
+      padding: 54px 42px;
+      background: var(--portal-panel);
+      display: flex;
+      align-items: center;
+    }
+    .form-card { width: 100%; }
+    .form-head h1 {
+      margin: 0 0 .45rem;
+      font-size: clamp(1.8rem, 2.5vw, 2.4rem);
+      font-weight: 800;
+    }
+    .form-head p { color: var(--portal-muted); font-size: 1rem; margin-bottom: 1.8rem; }
+    .secure-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .55rem .95rem;
+      border-radius: 999px;
+      background: rgba(13,110,253,.14);
+      color: #cfe2ff;
+      border: 1px solid rgba(13,110,253,.22);
+      margin-bottom: 1rem;
+      font-weight: 700;
+    }
+    .input-group-text, .form-control {
+      min-height: 54px;
+      border-color: rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      color: #fff;
+    }
+    .input-group-text { color: #bfdbfe; }
+    .form-control::placeholder { color: #9fb0c6; }
+    .form-control:focus {
+      background: rgba(255,255,255,.08);
+      color: #fff;
+      border-color: rgba(13,110,253,.40);
+      box-shadow: 0 0 0 .22rem rgba(13,110,253,.14);
+    }
+    .portal-btn {
+      min-height: 54px;
+      font-size: 1rem;
+      font-weight: 800;
+      border-radius: 16px;
+      box-shadow: 0 14px 30px rgba(13,110,253,.18);
+    }
+    .form-note { color: #9fb0c6; font-size: .95rem; }
+    .quick-links {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 12px;
+      margin-top: 1rem;
+    }
+    .quick-link {
+      text-decoration: none;
+      color: #dbeafe;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 16px;
+      padding: .95rem 1rem;
+      background: rgba(255,255,255,.04);
+      font-weight: 700;
+    }
+    @media (max-width: 991.98px) {
+      .portal-shell { grid-template-columns: 1fr; }
+      .portal-side { padding: 34px 26px; }
+      .portal-form { padding: 34px 26px; }
+    }
+    @media (max-width: 575.98px) {
+      body { padding: 14px; }
+      .brand-grid, .quick-links { grid-template-columns: 1fr; }
+      .portal-side, .portal-form { padding: 24px 18px; }
+      .brand-logo { width: 86px; height: 86px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="portal-shell">
+    <section class="portal-side">
+      <div class="brand-badge"><i class="bi bi-buildings"></i> Governo do Estado do Amazonas</div>
+      <img class="brand-logo" src="../dist/assets/img/AdminLTELogo.png" alt="Logo" />
+      <h2 class="brand-title">Portal de<br>Relatórios</h2>
+      <p class="brand-text">Acesso institucional com visual premium, preparado para painéis administrativos, histórico de PDFs, segurança de usuários, consulta unificada e acompanhamento operacional.</p>
+      <div class="brand-grid">
+        <div class="brand-card"><strong>100%</strong><span>Responsivo</span></div>
+        <div class="brand-card"><strong>Admin</strong><span>Painel premium</span></div>
+        <div class="brand-card"><strong>Seguro</strong><span>Acesso controlado</span></div>
+      </div>
+    </section>
+
+    <section class="portal-form">
+      <div class="form-card">
+        <div class="secure-badge"><i class="bi bi-shield-lock"></i> Ambiente administrativo protegido</div>
+        <div class="form-head">
+          <h1>Entrar no sistema</h1>
+          <p>Use este layout como referência institucional para páginas de autenticação e módulos auxiliares do projeto.</p>
+        </div>
+        <form>
+          <div class="mb-3">
+            <label class="form-label text-light fw-semibold">Usuário institucional</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-person"></i></span>
+              <input type="text" class="form-control" placeholder="Digite seu usuário" />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label text-light fw-semibold">Senha</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-key"></i></span>
+              <input type="password" class="form-control" placeholder="Digite sua senha" />
+            </div>
+          </div>
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+            <div class="form-check text-light">
+              <input class="form-check-input" type="checkbox" id="lembrar" checked>
+              <label class="form-check-label" for="lembrar">Manter sessão ativa</label>
+            </div>
+            <span class="form-note">Template institucional demonstrativo</span>
+          </div>
+          <div class="d-grid">
+            <button type="submit" class="btn btn-primary portal-btn"><i class="bi bi-box-arrow-in-right me-2"></i>Acessar painel</button>
+          </div>
+        </form>
+
+        <div class="quick-links">
+          <a href="index.html" class="quick-link"><i class="bi bi-grid me-2"></i>Ver painel estático</a>
+          <a href="../../../../admin" class="quick-link"><i class="bi bi-arrow-up-right-circle me-2"></i>Ir para o sistema</a>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

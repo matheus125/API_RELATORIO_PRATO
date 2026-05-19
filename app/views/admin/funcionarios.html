@@ -1,0 +1,102 @@
+<div class="content-wrapper">
+  <main class="app-main">
+    <div class="app-content px-3 px-md-4 py-4">
+      <section class="portal-page-header">
+        <span class="portal-kicker"><i class="fa-solid fa-users"></i> Gestão de usuários</span>
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+          <div>
+            <h1 class="portal-page-title">Funcionários</h1>
+            <p class="portal-page-subtitle">Gerencie os usuários do Portal de Relatórios com visual unificado, ações rápidas e experiência responsiva em qualquer tela.</p>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <a href="/admin" class="btn btn-light"><i class="fa-solid fa-arrow-left me-2"></i>Painel</a>
+            {if="canAccess('FUNCIONARIOS_CREATE')"}<a href="/admin/funcionarios/create" class="btn btn-primary"><i class="fa-solid fa-user-plus me-2"></i>Novo cadastro</a>{/if}
+          </div>
+        </div>
+      </section>
+
+      <div class="row g-4 mb-4">
+        <div class="col-12 col-md-4">
+          <div class="card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+              <div class="rounded-4 bg-primary-subtle text-primary d-flex align-items-center justify-content-center" style="width:60px;height:60px;font-size:1.35rem;"><i class="fa-solid fa-id-badge"></i></div>
+              <div>
+                <div class="text-muted small text-uppercase fw-semibold">Total cadastrado</div>
+                <div class="fs-3 fw-bold">{function="count($funcionarios)"}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+              <div class="rounded-4 bg-success-subtle text-success d-flex align-items-center justify-content-center" style="width:60px;height:60px;font-size:1.35rem;"><i class="fa-solid fa-envelope-circle-check"></i></div>
+              <div>
+                <div class="text-muted small text-uppercase fw-semibold">Gestão centralizada</div>
+                <div class="fw-bold">Cadastro, edição e senha</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+              <div class="rounded-4 bg-warning-subtle text-warning d-flex align-items-center justify-content-center" style="width:60px;height:60px;font-size:1.35rem;"><i class="fa-solid fa-mobile-screen-button"></i></div>
+              <div>
+                <div class="text-muted small text-uppercase fw-semibold">Responsividade</div>
+                <div class="fw-bold">Layout premium para desktop e mobile</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <h3 class="card-title mb-0"><i class="fa-solid fa-list-check me-2 text-primary"></i>Lista de funcionários</h3>
+          <span class="text-muted small">Acompanhe, edite e mantenha os acessos atualizados.</span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style="width: 90px;">ID</th>
+                  <th>Nome</th>
+                  <th>E-mail</th>
+                  <th>Login</th>
+                  <th style="width: 280px;">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {if="count($funcionarios) > 0"}
+                  {loop="$funcionarios"}
+                  <tr>
+                    <td><span class="badge rounded-pill badge-soft-primary px-3 py-2 fw-semibold">#{$value.id_usuario}</span></td>
+                    <td>
+                      <div class="fw-semibold">{$value.nome_funcionario}</div>
+                    </td>
+                    <td>{$value.email}</td>
+                    <td>{$value.cpf}</td>
+                    <td>
+                      <div class="d-flex flex-wrap gap-2">
+                        {if="canAccess('FUNCIONARIOS_UPDATE')"}<a href="/admin/funcionarios/{$value.id_usuario}" class="btn btn-primary btn-xs"><i class="fa-solid fa-pen-to-square me-1"></i>Editar</a>{/if}
+                        {if="canAccess('FUNCIONARIOS_PASSWORD')"}<a href="/admin/funcionarios/{$value.id_usuario}/password" class="btn btn-warning btn-xs text-white"><i class="fa-solid fa-key me-1"></i>Senha</a>{/if}
+                        {if="canAccess('FUNCIONARIOS_DELETE')"}<a href="/admin/funcionarios/{$value.id_usuario}/delete" onclick="return confirm('Deseja realmente excluir este registro?')" class="btn btn-danger btn-xs"><i class="fa-solid fa-trash-can me-1"></i>Excluir</a>{/if}
+                      </div>
+                    </td>
+                  </tr>
+                  {/loop}
+                {else}
+                  <tr>
+                    <td colspan="5" class="text-center py-5 text-muted">Nenhum funcionário encontrado.</td>
+                  </tr>
+                {/if}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
