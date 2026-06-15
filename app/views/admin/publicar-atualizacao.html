@@ -1,0 +1,379 @@
+<div class="content-wrapper">
+  <section class="content-header">
+    <div class="container-fluid">
+      <div class="row mb-2 align-items-center">
+        <div class="col-sm-7">
+          <h1>Publicar Atualização</h1>
+        </div>
+        <div class="col-sm-5 text-sm-end">
+          <span class="badge bg-primary">Versão atual: {$currentVersion}</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="content">
+    <div class="container-fluid pc-publish">
+      <div class="row g-3">
+        <div class="col-lg-5">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Dados da publicação</h3>
+            </div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label for="pcVersion" class="form-label">Nova versão</label>
+                <input type="text" class="form-control" id="pcVersion" placeholder="1.0.4" autocomplete="off">
+              </div>
+              <div class="mb-3">
+                <label for="pcChangelog" class="form-label">Changelog</label>
+                <textarea class="form-control" id="pcChangelog" rows="8" placeholder="Descreva as correções e melhorias desta versão"></textarea>
+              </div>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary" id="pcTestConnection">
+                  <i class="bi bi-cloud-check"></i> Testar conexão
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="pcPreview">
+                  <i class="bi bi-list-check"></i> Visualizar arquivos
+                </button>
+                <button type="button" class="btn btn-success" id="pcPublish">
+                  <i class="bi bi-cloud-upload"></i> Publicar atualização
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="alert mt-3 d-none" id="pcStatus"></div>
+
+          <div class="card mt-3 d-none" id="pcChecklistCard">
+            <div class="card-header">
+              <h3 class="card-title mb-0">Checklist de publicação</h3>
+            </div>
+            <div class="card-body">
+              <div id="pcChecklistRows" class="pc-checklist"></div>
+              <div class="mt-3 d-none" id="pcBlockedBox">
+                <div class="pc-summary-label">Arquivos bloqueando publicação</div>
+                <ul class="mb-0 mt-2" id="pcBlockedRows"></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-7">
+          <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+              <h3 class="card-title mb-0">Arquivos que entrarão no ZIP</h3>
+              <span class="badge bg-light text-dark" id="pcIncludedCount">0</span>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive pc-table-box">
+                <table class="table table-sm table-hover mb-0">
+                  <thead>
+                    <tr>
+                      <th>Status</th>
+                      <th>Arquivo</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pcIncludedRows">
+                    <tr><td colspan="2" class="text-muted text-center py-4">Clique em Visualizar arquivos.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-3">
+            <div class="card-header d-flex align-items-center justify-content-between">
+              <h3 class="card-title mb-0">Arquivos ignorados</h3>
+              <span class="badge bg-light text-dark" id="pcIgnoredCount">0</span>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive pc-table-box pc-table-box-small">
+                <table class="table table-sm table-hover mb-0">
+                  <thead>
+                    <tr>
+                      <th>Motivo</th>
+                      <th>Arquivo</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pcIgnoredRows">
+                    <tr><td colspan="2" class="text-muted text-center py-4">Nenhum preview carregado.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-3 d-none" id="pcSummaryCard">
+        <div class="card-header">
+          <h3 class="card-title">Resumo final</h3>
+        </div>
+        <div class="card-body">
+          <div class="row g-3" id="pcSummary"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<style>
+  .pc-publish .card {
+    border-radius: 8px;
+  }
+
+  .pc-table-box {
+    max-height: 380px;
+    overflow: auto;
+  }
+
+  .pc-table-box-small {
+    max-height: 240px;
+  }
+
+  .pc-summary-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 78px;
+    background: #fff;
+  }
+
+  .pc-summary-label {
+    font-size: 12px;
+    color: #6b7280;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+
+  .pc-summary-value {
+    margin-top: 4px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  .pc-checklist {
+    display: grid;
+    gap: 8px;
+  }
+
+  .pc-check-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .pc-check-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex: 0 0 auto;
+  }
+
+  .pc-check-ok .pc-check-icon {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .pc-check-fail .pc-check-icon {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .pc-check-title {
+    font-weight: 700;
+  }
+
+  .pc-check-msg {
+    font-size: 13px;
+    color: #6b7280;
+  }
+</style>
+
+<script>
+  (function () {
+    const els = {
+      version: document.getElementById('pcVersion'),
+      changelog: document.getElementById('pcChangelog'),
+      test: document.getElementById('pcTestConnection'),
+      preview: document.getElementById('pcPreview'),
+      publish: document.getElementById('pcPublish'),
+      status: document.getElementById('pcStatus'),
+      includedRows: document.getElementById('pcIncludedRows'),
+      ignoredRows: document.getElementById('pcIgnoredRows'),
+      includedCount: document.getElementById('pcIncludedCount'),
+      ignoredCount: document.getElementById('pcIgnoredCount'),
+      summaryCard: document.getElementById('pcSummaryCard'),
+      summary: document.getElementById('pcSummary'),
+      checklistCard: document.getElementById('pcChecklistCard'),
+      checklistRows: document.getElementById('pcChecklistRows'),
+      blockedBox: document.getElementById('pcBlockedBox'),
+      blockedRows: document.getElementById('pcBlockedRows')
+    };
+
+    let previewLoaded = false;
+
+    function esc(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[ch];
+      });
+    }
+
+    function setBusy(busy) {
+      [els.test, els.preview, els.publish].forEach(function (btn) { btn.disabled = busy; });
+    }
+
+    function showStatus(type, message) {
+      els.status.className = 'alert mt-3 alert-' + type;
+      els.status.textContent = message;
+      els.status.classList.remove('d-none');
+    }
+
+    function renderRows(target, rows, ignored) {
+      if (!rows || rows.length === 0) {
+        target.innerHTML = '<tr><td colspan="2" class="text-muted text-center py-4">Nenhum arquivo.</td></tr>';
+        return;
+      }
+      target.innerHTML = rows.map(function (item) {
+        const first = ignored ? (item.reason || '-') : (item.status || '-');
+        return '<tr><td><span class="badge bg-light text-dark">' + esc(first) + '</span></td><td><code>' + esc(item.path) + '</code></td></tr>';
+      }).join('');
+    }
+
+    function renderPreview(data) {
+      const included = data.included || [];
+      const ignored = data.ignored || [];
+      els.includedCount.textContent = included.length;
+      els.ignoredCount.textContent = ignored.length;
+      renderRows(els.includedRows, included, false);
+      renderRows(els.ignoredRows, ignored, true);
+      renderPreflight(data.preflight || {});
+      previewLoaded = true;
+    }
+
+    function renderPreflight(preflight) {
+      const checks = preflight.checks || [];
+      const blocked = preflight.blocked || [];
+      els.checklistCard.classList.remove('d-none');
+      els.checklistRows.innerHTML = checks.length ? checks.map(function (item) {
+        const ok = !!item.ok;
+        return '<div class="pc-check-item ' + (ok ? 'pc-check-ok' : 'pc-check-fail') + '">' +
+          '<span class="pc-check-icon">' + (ok ? '✓' : '!') + '</span>' +
+          '<div><div class="pc-check-title">' + esc(item.label || '-') + '</div>' +
+          '<div class="pc-check-msg">' + esc(item.message || '') + '</div></div>' +
+        '</div>';
+      }).join('') : '<div class="text-muted">Checklist indisponivel.</div>';
+
+      if (blocked.length) {
+        els.blockedRows.innerHTML = blocked.map(function (path) {
+          return '<li><code>' + esc(path) + '</code></li>';
+        }).join('');
+        els.blockedBox.classList.remove('d-none');
+      } else {
+        els.blockedRows.innerHTML = '';
+        els.blockedBox.classList.add('d-none');
+      }
+    }
+
+    function summaryItem(label, value) {
+      return '<div class="col-md-4"><div class="pc-summary-item"><div class="pc-summary-label">' + esc(label) + '</div><div class="pc-summary-value">' + esc(value) + '</div></div></div>';
+    }
+
+    function formatBytes(bytes) {
+      bytes = Number(bytes || 0);
+      if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+      if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KB';
+      return bytes + ' B';
+    }
+
+    function renderSummary(data) {
+      els.summaryCard.classList.remove('d-none');
+      els.summary.innerHTML =
+        summaryItem('Versão publicada', data.version || '-') +
+        summaryItem('Arquivos incluídos', (data.included || []).length) +
+        summaryItem('Arquivos ignorados', (data.ignored || []).length) +
+        summaryItem('Tamanho do ZIP', formatBytes(data.zip_size)) +
+        summaryItem('URL do ZIP', data.url || '-') +
+        summaryItem('Upload ZIP', data.upload && data.upload.success ? 'sucesso' : 'pendente') +
+        summaryItem('JSON local', data.json_status && data.json_status.local ? 'atualizado' : 'pendente') +
+        summaryItem('JSON nuvem', data.json_status && data.json_status.remote ? 'enviado' : 'pendente') +
+        summaryItem('Checksum', data.sha256 || '-');
+    }
+
+    async function requestJson(url, options) {
+      const resp = await fetch(url, options || { credentials: 'same-origin' });
+      const text = await resp.text();
+      let json = {};
+      try { json = JSON.parse(text); } catch (e) { json = { success: false, message: text || 'Resposta inválida.' }; }
+      if (!resp.ok || json.success === false) {
+        throw new Error(json.message || 'Operação não concluída.');
+      }
+      return json;
+    }
+
+    els.test.addEventListener('click', async function () {
+      setBusy(true);
+      try {
+        const data = await requestJson('/admin/api/update-publish/test-connection', { method: 'POST', credentials: 'same-origin' });
+        showStatus('success', data.message || 'Conexão validada.');
+      } catch (err) {
+        showStatus('danger', err.message);
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    els.preview.addEventListener('click', async function () {
+      setBusy(true);
+      try {
+        const json = await requestJson('/admin/api/update-publish/preview', { credentials: 'same-origin' });
+        renderPreview(json.data || {});
+        const preflight = (json.data && json.data.preflight) || {};
+        showStatus(preflight.success === false ? 'warning' : 'info', preflight.success === false ? 'Preview carregado com bloqueios de publicação.' : 'Preview carregado.');
+      } catch (err) {
+        showStatus('danger', err.message);
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    els.publish.addEventListener('click', async function () {
+      if (!previewLoaded) {
+        showStatus('warning', 'Visualize os arquivos antes de publicar.');
+        return;
+      }
+      if (!els.version.value.trim() || !els.changelog.value.trim()) {
+        showStatus('warning', 'Informe a nova versão e o changelog.');
+        return;
+      }
+      if (!confirm('Publicar a versão ' + els.version.value.trim() + '?')) return;
+
+      setBusy(true);
+      try {
+        const form = new FormData();
+        form.append('version', els.version.value.trim());
+        form.append('changelog', els.changelog.value.trim());
+        const data = await requestJson('/admin/api/update-publish/publish', {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: form
+        });
+        renderSummary(data);
+        showStatus('success', 'Atualização publicada com sucesso.');
+      } catch (err) {
+        showStatus('danger', err.message);
+      } finally {
+        setBusy(false);
+      }
+    });
+  })();
+</script>

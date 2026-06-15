@@ -7,6 +7,46 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
+if (!function_exists('normalizarNomeUnidade')) {
+    /**
+     * Normaliza nomes de unidades para comparar banco e planilha sem depender de acento,
+     * caixa, underline, caracteres especiais ou espacos duplicados.
+     *
+     * @param mixed $texto
+     * @return string
+     */
+    function normalizarNomeUnidade($texto)
+    {
+        $texto = (string)$texto;
+        $texto = function_exists('mb_strtolower') ? mb_strtolower($texto, 'UTF-8') : strtolower($texto);
+
+        $acentos = [
+            'á','à','ã','â','ä',
+            'é','è','ê','ë',
+            'í','ì','î','ï',
+            'ó','ò','õ','ô','ö',
+            'ú','ù','û','ü',
+            'ç','ñ'
+        ];
+
+        $semAcento = [
+            'a','a','a','a','a',
+            'e','e','e','e',
+            'i','i','i','i',
+            'o','o','o','o','o',
+            'u','u','u','u',
+            'c','n'
+        ];
+
+        $texto = str_replace($acentos, $semAcento, $texto);
+        $texto = str_replace('_', ' ', $texto);
+        $texto = preg_replace('/[^a-z0-9 ]/', '', $texto);
+        $texto = preg_replace('/\s+/', ' ', $texto);
+
+        return trim($texto);
+    }
+}
+
 /**
  * Exporta os dados de tb_relatorios para a planilha mensal "RESULTADOS ALCANÇADOS 2026 (Jan - Dez).xlsx".
  *
@@ -29,14 +69,40 @@ class RelatorioPlanilhaMensalExporter
      * @var string[]
      */
     protected $prefixosCabecalho = [
-        'RESTAURANTE POPULAR ',
-        'RESTAURANTE ',
-        'COZINHA ',
+        'restaurante popular ',
+        'restaurante ',
+        'cozinha ',
     ];
+
+    /**
+     * Mapa manual para excecoes conhecidas entre nome_banco e titulo/texto da planilha.
+     * @var array<string,string>
+     */
+    protected $mapaUnidades = [
+        'sao_jose' => 'SÃO JOSE',
+        'rio_piorini' => 'RIO PIORINI',
+        'parque_sao_pedro' => 'PARQUE SÃO PEDRO',
+        'alfredo_nascimento' => 'ALFREDO NASCIMENTO',
+        'mauazinho' => 'PARQUE MAUÁ',
+    ];
+
+    /** @var bool */
+    protected $debugPlanilha = false;
 
     public function __construct(Sql $sql)
     {
         $this->sql = $sql;
+    }
+
+    /**
+     * Ativa logs detalhados de resolucao de unidade x planilha.
+     *
+     * @param bool $ativo
+     * @return void
+     */
+    public function setDebugPlanilha($ativo)
+    {
+        $this->debugPlanilha = (bool)$ativo;
     }
 
     /**
@@ -94,15 +160,23 @@ class RelatorioPlanilhaMensalExporter
 
             $coluna = $this->obterColunaDoDia($dia);
             $nomeBanco = isset($registro['nome_banco']) ? $registro['nome_banco'] : '';
-            $chaveUnidade = $this->normalizarNomeUnidade($nomeBanco);
+            $unidadePlanilha = $this->localizarUnidadeNaPlanilha($nomeBanco, $mapaUnidadesNaPlanilha);
 
-            if (!isset($mapaUnidadesNaPlanilha[$chaveUnidade])) {
-                // Se quiser depurar unidades não encontradas, habilite este log.
-                // error_log('Unidade não encontrada na planilha: ' . $nomeBanco . ' | chave=' . $chaveUnidade);
+            if ($unidadePlanilha === null) {
+                error_log('Aba/unidade não encontrada para unidade: ' . $nomeBanco . ' | normalizado=' . $this->normalizarNomeUnidade($nomeBanco));
                 continue;
             }
 
-            $linhaBase = (int)$mapaUnidadesNaPlanilha[$chaveUnidade];
+            $linhaBase = (int)$unidadePlanilha['linha'];
+
+            if ($this->debugPlanilha) {
+                error_log(
+                    '[DEBUG PLANILHA] Banco: ' . $nomeBanco .
+                    ' | Normalizado: ' . $this->normalizarNomeUnidade($nomeBanco) .
+                    ' | Aba/unidade encontrada: ' . $unidadePlanilha['nome_original'] .
+                    ' | Linha: ' . $linhaBase
+                );
+            }
 
             foreach ($mapaCampos as $nomeCampo => $config) {
                 $offset = (int)$config['offset'];
@@ -186,7 +260,7 @@ class RelatorioPlanilhaMensalExporter
     }
 
     /**
-     * Faz o scan da coluna A da aba do mês e monta o mapa [UNIDADE_NORMALIZADA => linhaBase].
+     * Faz o scan da coluna A da aba do mês e monta o mapa [UNIDADE_NORMALIZADA => dados da unidade].
      *
      * Exemplo:
      * - CENTRO => 4
@@ -225,7 +299,11 @@ class RelatorioPlanilhaMensalExporter
             }
 
             $chave = $this->normalizarNomeUnidade($textoCabecalho);
-            $mapa[$chave] = $linha;
+            $mapa[$chave] = [
+                'linha' => $linha,
+                'nome_original' => $textoCabecalho,
+                'normalizado' => $chave,
+            ];
         }
 
         if (empty($mapa)) {
@@ -409,11 +487,7 @@ class RelatorioPlanilhaMensalExporter
      */
     protected function normalizarNomeUnidade($nome)
     {
-        $nome = (string)$nome;
-        $nome = str_replace(["\r", "\n", "\t"], ' ', $nome);
-        $nome = preg_replace('/\s+/', ' ', $nome);
-        $nome = trim($nome);
-        $nome = mb_strtoupper($nome, 'UTF-8');
+        $nome = normalizarNomeUnidade($nome);
 
         foreach ($this->prefixosCabecalho as $prefixo) {
             if (strpos($nome, $prefixo) === 0) {
@@ -422,18 +496,14 @@ class RelatorioPlanilhaMensalExporter
             }
         }
 
-        $nome = $this->removerAcentos($nome);
-        $nome = str_replace(['(', ')', '.', ',', ';', ':'], '', $nome);
         $nome = preg_replace('/\s+/', ' ', $nome);
         $nome = trim($nome);
 
         // Corrige variações conhecidas do modelo.
         $substituicoes = [
-            'VIVER MEHLOR' => 'VIVER MELHOR',
-            'COZINHAPARQUE SAO PEDRO' => 'PARQUE SAO PEDRO',
-            'PARQUE SAO PEDRO' => 'PARQUE SAO PEDRO',
-            'BAIRRO DA UNIAO' => 'BAIRRO DA UNIAO',
-            'RIACHO DOCE CIDADE NOVA' => 'RIACHO DOCE CIDADE NOVA',
+            'viver mehlor' => 'viver melhor',
+            'cozinhaparque sao pedro' => 'parque sao pedro',
+            'parques sao pedro' => 'parque sao pedro',
         ];
 
         if (isset($substituicoes[$nome])) {
@@ -441,6 +511,95 @@ class RelatorioPlanilhaMensalExporter
         }
 
         return $nome;
+    }
+
+    /**
+     * Encontra a unidade na planilha usando mapa manual, match normalizado e fallback parcial.
+     *
+     * @param string $nomeBanco
+     * @param array  $mapaUnidadesNaPlanilha
+     * @return array|null
+     */
+    protected function localizarUnidadeNaPlanilha($nomeBanco, array $mapaUnidadesNaPlanilha)
+    {
+        $nomeBanco = (string)$nomeBanco;
+        $chaveOriginalBanco = trim($nomeBanco);
+        $chaveOriginalBancoMinuscula = function_exists('mb_strtolower') ? mb_strtolower($chaveOriginalBanco, 'UTF-8') : strtolower($chaveOriginalBanco);
+
+        if (isset($this->mapaUnidades[$chaveOriginalBanco]) || isset($this->mapaUnidades[$chaveOriginalBancoMinuscula])) {
+            $nomePlanilhaManual = isset($this->mapaUnidades[$chaveOriginalBanco])
+                ? $this->mapaUnidades[$chaveOriginalBanco]
+                : $this->mapaUnidades[$chaveOriginalBancoMinuscula];
+            $nomePlanilhaManual = $this->normalizarNomeUnidade($nomePlanilhaManual);
+            if (isset($mapaUnidadesNaPlanilha[$nomePlanilhaManual])) {
+                return $mapaUnidadesNaPlanilha[$nomePlanilhaManual];
+            }
+        }
+
+        $chaveUnidade = $this->normalizarNomeUnidade($nomeBanco);
+
+        if (isset($mapaUnidadesNaPlanilha[$chaveUnidade])) {
+            return $mapaUnidadesNaPlanilha[$chaveUnidade];
+        }
+
+        $chaveSemEspaco = $this->compactarNomeUnidade($chaveUnidade);
+        $chaveSingular = $this->singularizarNomeUnidade($chaveUnidade);
+        $chaveSingularSemEspaco = $this->compactarNomeUnidade($chaveSingular);
+
+        foreach ($mapaUnidadesNaPlanilha as $chavePlanilha => $dadosPlanilha) {
+            $planilhaSemEspaco = $this->compactarNomeUnidade($chavePlanilha);
+            $planilhaSingular = $this->singularizarNomeUnidade($chavePlanilha);
+            $planilhaSingularSemEspaco = $this->compactarNomeUnidade($planilhaSingular);
+
+            if ($chaveSemEspaco !== '' && $chaveSemEspaco === $planilhaSemEspaco) {
+                return $dadosPlanilha;
+            }
+
+            if ($chaveSingular !== '' && $chaveSingular === $planilhaSingular) {
+                return $dadosPlanilha;
+            }
+
+            if ($chaveSingularSemEspaco !== '' && $chaveSingularSemEspaco === $planilhaSingularSemEspaco) {
+                return $dadosPlanilha;
+            }
+
+            if (
+                $chaveSemEspaco !== '' &&
+                $planilhaSemEspaco !== '' &&
+                (strpos($planilhaSemEspaco, $chaveSemEspaco) !== false || strpos($chaveSemEspaco, $planilhaSemEspaco) !== false)
+            ) {
+                return $dadosPlanilha;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param string $nome
+     * @return string
+     */
+    protected function compactarNomeUnidade($nome)
+    {
+        return str_replace(' ', '', (string)$nome);
+    }
+
+    /**
+     * Fallback simples para diferencas de plural/singular em palavras finais.
+     *
+     * @param string $nome
+     * @return string
+     */
+    protected function singularizarNomeUnidade($nome)
+    {
+        $partes = explode(' ', (string)$nome);
+        foreach ($partes as $indice => $parte) {
+            if (strlen($parte) > 3 && substr($parte, -1) === 's') {
+                $partes[$indice] = substr($parte, 0, -1);
+            }
+        }
+
+        return trim(implode(' ', $partes));
     }
 
     /**

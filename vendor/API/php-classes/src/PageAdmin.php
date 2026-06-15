@@ -4,6 +4,7 @@ namespace Hcode;
 
 use Hcode\Model\Funcionarios;
 use Hcode\Model\Notification;
+use Hcode\Model\Permissions;
 
 class PageAdmin extends Page
 {
@@ -14,6 +15,13 @@ class PageAdmin extends Page
         $headerEnabled = ($opts['header'] ?? true) !== false;
 
         if ($headerEnabled) {
+            try {
+                Permissions::syncDefinitions();
+                Funcionarios::refreshPermissions();
+            } catch (\Throwable $e) {
+                // O menu nao deve quebrar se a tabela de permissoes ainda nao existir.
+            }
+
             $notificacoesSessao = $data['notificacoes'] ?? Notification::getAll();
             $notificacoesBackup = function_exists('getBackupNotifications') ? getBackupNotifications(10) : [];
 

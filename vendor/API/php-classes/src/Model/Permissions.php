@@ -20,6 +20,8 @@ class Permissions
             'ACL_DENIED_VIEW' => ['description' => 'Visualizar acessos negados', 'module_name' => 'SEGURANCA'],
             'USUARIOS_SECURITY_MANAGE' => ['description' => 'Gerenciar status e bloqueio de usuários', 'module_name' => 'SEGURANCA'],
             'AUDITORIA_VIEW' => ['description' => 'Visualizar logs de auditoria', 'module_name' => 'SEGURANCA'],
+            'UPDATE_MONITORING_VIEW' => ['description' => 'Visualizar monitoramento de atualizações', 'module_name' => 'SEGURANCA'],
+            'UPDATE_PUBLISH_MANAGE' => ['description' => 'Publicar atualizações do sistema', 'module_name' => 'SEGURANCA'],
             'PLANILHA_EXPORT' => ['description' => 'Gerar e baixar planilhas', 'module_name' => 'RELATORIOS'],
             'SISTEMA_DEBUG' => ['description' => 'Acessar rotas de debug', 'module_name' => 'SEGURANCA'],
         ];
@@ -40,6 +42,12 @@ class Permissions
             '/admin/seguranca/acessos-negados' => 'ACL_DENIED_VIEW',
             '/admin/usuarios/seguranca' => 'USUARIOS_SECURITY_MANAGE',
             '/admin/seguranca/auditoria' => 'AUDITORIA_VIEW',
+            '/admin/monitoramento-atualizacoes' => 'UPDATE_MONITORING_VIEW',
+            '/admin/api/updates/monitoring' => 'UPDATE_MONITORING_VIEW',
+            '/admin/publicar-atualizacao' => 'UPDATE_PUBLISH_MANAGE',
+            '/admin/api/update-publish/preview' => 'UPDATE_PUBLISH_MANAGE',
+            '/admin/api/update-publish/test-connection' => 'UPDATE_PUBLISH_MANAGE',
+            '/admin/api/update-publish/publish' => 'UPDATE_PUBLISH_MANAGE',
         ];
     }
 

@@ -5,6 +5,10 @@
  */
 
 define('ROOT_DIR', realpath(__DIR__ . '/..'));
+
+require_once __DIR__ . '/env.php';
+portal_load_env(ROOT_DIR . DIRECTORY_SEPARATOR . '.env');
+
 define('PUBLIC_DIR', ROOT_DIR . '/public');
 define('APP_DIR', ROOT_DIR . '/app');
 define('CONFIG_DIR', ROOT_DIR . '/config');

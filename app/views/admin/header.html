@@ -422,6 +422,17 @@
             <li class="nav-item"><a href="/admin/relatorio/pdf/historico" class="nav-link"><i class="nav-icon bi bi-file-earmark-pdf"></i><p>Histórico PDF</p></a></li>
             <li class="nav-item"><a href="/admin/relatorio/planilha" class="nav-link"><i class="nav-icon bi bi-file-earmark-excel"></i><p>Planilha mensal</p></a></li>
             <li class="nav-item"><a href="/admin/consulta-unificada" class="nav-link"><i class="nav-icon bi bi-diagram-3"></i><p>Consulta unificada</p></a></li>
+            <li class="nav-item"><a href="/admin/unidades-atualizadas" class="nav-link"><i class="nav-icon bi bi-building-check"></i><p>Unidades atualizadas</p></a></li>
+            {/if}
+
+            {if="canAnyAccess(['UPDATE_MONITORING_VIEW','UPDATE_PUBLISH_MANAGE'])"}
+            <li class="nav-header">Atualizações</li>
+            {/if}
+            {if="canAccess('UPDATE_MONITORING_VIEW')"}
+            <li class="nav-item"><a href="/admin/monitoramento-atualizacoes" class="nav-link"><i class="nav-icon bi bi-activity"></i><p>Monitoramento de Atualizações</p></a></li>
+            {/if}
+            {if="canAccess('UPDATE_PUBLISH_MANAGE')"}
+            <li class="nav-item"><a href="/admin/publicar-atualizacao" class="nav-link"><i class="nav-icon bi bi-cloud-upload"></i><p>Publicar Atualização</p></a></li>
             {/if}
 
             {if="canAnyAccess(['ACL_PROFILES_MANAGE','USUARIOS_SECURITY_MANAGE','ACL_DENIED_VIEW','AUDITORIA_VIEW'])"}

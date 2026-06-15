@@ -29,6 +29,8 @@ class Permissions
             'ACL_PROFILES_MANAGE' => 'Gerenciar permissões por perfil',
             'ACL_DENIED_VIEW' => 'Visualizar acessos negados',
             'USUARIOS_SECURITY_MANAGE' => 'Gerenciar status/bloqueio de usuários',
+            'UPDATE_MONITORING_VIEW' => 'Visualizar monitoramento de atualizações',
+            'UPDATE_PUBLISH_MANAGE' => 'Publicar atualizações do sistema',
             'PLANILHA_EXPORT' => 'Gerar e baixar planilhas',
             'SISTEMA_DEBUG' => 'Acessar rotas de debug'
         ];
@@ -82,6 +84,12 @@ class Permissions
             '/admin/seguranca/permissoes' => 'ACL_PROFILES_MANAGE',
             '/admin/seguranca/acessos-negados' => 'ACL_DENIED_VIEW',
             '/admin/usuarios/seguranca' => 'USUARIOS_SECURITY_MANAGE',
+            '/admin/monitoramento-atualizacoes' => 'UPDATE_MONITORING_VIEW',
+            '/admin/api/updates/monitoring' => 'UPDATE_MONITORING_VIEW',
+            '/admin/publicar-atualizacao' => 'UPDATE_PUBLISH_MANAGE',
+            '/admin/api/update-publish/preview' => 'UPDATE_PUBLISH_MANAGE',
+            '/admin/api/update-publish/test-connection' => 'UPDATE_PUBLISH_MANAGE',
+            '/admin/api/update-publish/publish' => 'UPDATE_PUBLISH_MANAGE',
         ];
     }
 

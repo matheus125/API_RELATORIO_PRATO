@@ -1,0 +1,440 @@
+<style>
+  .updates-page { padding: 18px; }
+  .updates-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+  .updates-title { margin: 0; font-size: 1.45rem; font-weight: 700; color: #1f2937; }
+  .updates-subtitle { margin: 4px 0 0; color: #64748b; }
+  .updates-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .updates-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
+  .updates-card-label { font-size: .78rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0; }
+  .updates-card-value { margin-top: 6px; font-size: 1.55rem; font-weight: 800; color: #111827; line-height: 1; }
+  .updates-card small { display: block; margin-top: 8px; color: #64748b; }
+  .updates-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
+  .updates-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .updates-panel-title { margin: 0; font-size: 1rem; font-weight: 800; color: #1f2937; }
+  .updates-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .updates-filters { display: grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); gap: 10px; }
+  .updates-status { display: inline-flex; align-items: center; justify-content: center; min-width: 94px; padding: 4px 8px; border-radius: 999px; font-size: .76rem; font-weight: 800; white-space: nowrap; }
+  .updates-status-success { color: #166534; background: #dcfce7; }
+  .updates-status-danger { color: #991b1b; background: #fee2e2; }
+  .updates-status-primary { color: #1d4ed8; background: #dbeafe; }
+  .updates-status-warning { color: #92400e; background: #fef3c7; }
+  .updates-status-secondary { color: #334155; background: #e2e8f0; }
+  .updates-table-wrap { overflow: auto; }
+  .updates-table { min-width: 1680px; margin: 0; }
+  .updates-table th { white-space: nowrap; color: #475569; font-size: .78rem; }
+  .updates-table td { vertical-align: top; font-size: .84rem; }
+  .updates-muted { color: #64748b; }
+  .updates-link { border: 0; background: transparent; color: #1d4ed8; padding: 0; font-weight: 700; text-align: left; }
+  .updates-error-text { max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .updates-chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .updates-chart-box { height: 280px; }
+  .updates-empty { color: #64748b; padding: 18px; text-align: center; border: 1px dashed #cbd5e1; border-radius: 8px; }
+  .updates-modal { position: fixed; inset: 0; display: none; align-items: stretch; justify-content: flex-end; background: rgba(15, 23, 42, .42); z-index: 3000; }
+  .updates-modal.is-open { display: flex; }
+  .updates-modal-panel { width: min(920px, 100%); height: 100%; overflow: auto; background: #fff; padding: 18px; box-shadow: -8px 0 24px rgba(15, 23, 42, .16); }
+  .updates-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .updates-detail-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
+  .updates-detail-item small { display: block; color: #64748b; font-weight: 700; margin-bottom: 4px; }
+  .updates-pre { white-space: pre-wrap; word-break: break-word; max-height: 280px; overflow: auto; background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 12px; font-size: .8rem; }
+  @media (max-width: 1200px) {
+    .updates-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .updates-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .updates-chart-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    .updates-page { padding: 12px; }
+    .updates-head { display: block; }
+    .updates-grid, .updates-filters, .updates-detail-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="content-wrapper">
+  <section class="updates-page">
+    <div class="updates-head">
+      <div>
+        <h1 class="updates-title">Monitoramento de Atualizações</h1>
+        <p class="updates-subtitle">Status central das unidades que consultam, baixam e instalam atualizações do prato_web.</p>
+      </div>
+      <div class="updates-actions">
+        <button class="btn btn-outline-primary btn-sm" type="button" id="btnRefreshUpdates"><i class="bi bi-arrow-clockwise"></i> Atualizar</button>
+      </div>
+    </div>
+
+    <div class="updates-grid" id="updatesCards"></div>
+
+    <div class="updates-panel">
+      <div class="updates-panel-head">
+        <h2 class="updates-panel-title">Filtros</h2>
+        <span class="updates-muted" id="filterMessage"></span>
+      </div>
+      <form id="updatesFilters" class="updates-filters">
+        <input class="form-control form-control-sm" name="unidade" placeholder="Unidade">
+        <select class="form-select form-select-sm" name="municipio" id="filterMunicipio"><option value="">Município</option></select>
+        <select class="form-select form-select-sm" name="tipo_unidade" id="filterTipo"><option value="">Tipo</option></select>
+        <select class="form-select form-select-sm" name="sistema" id="filterSistema"><option value="">Sistema</option></select>
+        <select class="form-select form-select-sm" name="versao_instalada" id="filterVersaoInstalada"><option value="">Versão instalada</option></select>
+        <select class="form-select form-select-sm" name="versao_disponivel" id="filterVersaoDisponivel"><option value="">Versão disponível</option></select>
+        <select class="form-select form-select-sm" name="status">
+          <option value="">Status</option>
+          <option value="consultou">Consultaram</option>
+          <option value="baixou">Baixaram</option>
+          <option value="instalou">Instalaram</option>
+          <option value="erro">Falharam</option>
+          <option value="offline">Offline</option>
+          <option value="versao_antiga">Versões antigas</option>
+        </select>
+        <input class="form-control form-control-sm" type="date" name="data_inicio" title="Comunicação a partir de">
+        <input class="form-control form-control-sm" type="date" name="data_fim" title="Comunicação até">
+        <div class="updates-actions">
+          <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-funnel"></i> Filtrar</button>
+          <button class="btn btn-outline-secondary btn-sm" type="button" id="btnClearFilters"><i class="bi bi-x-circle"></i> Limpar</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="updates-panel">
+      <div class="updates-panel-head">
+        <h2 class="updates-panel-title">Regra de unidade offline</h2>
+        <span class="updates-muted" id="configMessage"></span>
+      </div>
+      <form class="updates-actions" id="offlineConfigForm">
+        <label class="form-label mb-0" for="offlineThreshold">Minutos sem comunicação</label>
+        <input class="form-control form-control-sm" style="width:120px" type="number" min="5" step="5" id="offlineThreshold" name="offline_threshold_minutes">
+        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-save"></i> Salvar</button>
+      </form>
+    </div>
+
+    <div class="updates-chart-grid">
+      <div class="updates-panel">
+        <div class="updates-panel-head">
+          <h2 class="updates-panel-title">Atualizações por versão</h2>
+        </div>
+        <div class="updates-chart-box"><canvas id="chartVersions"></canvas></div>
+      </div>
+      <div class="updates-panel">
+        <div class="updates-panel-head">
+          <h2 class="updates-panel-title">Status das unidades</h2>
+        </div>
+        <div class="updates-chart-box"><canvas id="chartStatus"></canvas></div>
+      </div>
+    </div>
+
+    <div class="updates-panel">
+      <div class="updates-panel-head">
+        <h2 class="updates-panel-title">Unidades</h2>
+        <span class="updates-muted" id="unitsCount"></span>
+      </div>
+      <div class="updates-table-wrap">
+        <table class="table table-hover updates-table">
+          <thead>
+            <tr>
+              <th>Unidade</th>
+              <th>Município</th>
+              <th>Tipo</th>
+              <th>Sistema</th>
+              <th>Versão instalada</th>
+              <th>Versão disponível</th>
+              <th>Status</th>
+              <th>Status banco</th>
+              <th>Etapa</th>
+              <th>Mensagem</th>
+              <th>Última comunicação</th>
+              <th>Último download</th>
+              <th>Última instalação</th>
+              <th>Data/hora local</th>
+              <th>IP</th>
+              <th>Tempo instalação</th>
+              <th>Arquivos ausentes</th>
+            </tr>
+          </thead>
+          <tbody id="unitsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="updates-panel">
+      <div class="updates-panel-head">
+        <h2 class="updates-panel-title">Histórico completo</h2>
+        <span class="updates-muted">Últimos 200 eventos</span>
+      </div>
+      <div class="updates-table-wrap">
+        <table class="table table-sm table-striped updates-table">
+          <thead>
+            <tr>
+              <th>Data/Hora</th>
+              <th>Unidade</th>
+              <th>Sistema</th>
+              <th>Versão atual</th>
+              <th>Versão disponível</th>
+              <th>Status</th>
+              <th>Etapa</th>
+              <th>Mensagem</th>
+              <th>IP</th>
+            </tr>
+          </thead>
+          <tbody id="logsTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="updates-modal" id="updatesDetailModal" aria-hidden="true">
+  <div class="updates-modal-panel">
+    <div class="updates-panel-head">
+      <h2 class="updates-panel-title" id="detailTitle">Detalhes</h2>
+      <button class="btn btn-outline-secondary btn-sm" type="button" id="btnCloseDetail"><i class="bi bi-x-lg"></i> Fechar</button>
+    </div>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  function parseEmbeddedJson(value, fallback) {
+    try {
+      const decoder = document.createElement('textarea');
+      decoder.innerHTML = value;
+      return JSON.parse(decoder.value);
+    } catch (err) {
+      return fallback;
+    }
+  }
+
+  const initialDashboard = parseEmbeddedJson('{$dashboardJson}', {});
+  const initialUnits = parseEmbeddedJson('{$unitsJson}', []);
+  const initialLogs = parseEmbeddedJson('{$logsJson}', []);
+  const initialFilterOptions = parseEmbeddedJson('{$filterOptionsJson}', {});
+  const state = { dashboard: initialDashboard, units: initialUnits, logs: initialLogs, filters: initialFilterOptions, charts: {} };
+
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
+  const statusClass = (item) => `updates-status updates-status-${esc(item.status_class || 'warning')}`;
+
+  function fillSelect(id, values) {
+    const el = document.getElementById(id);
+    const first = el.options[0].textContent;
+    el.innerHTML = `<option value="">${esc(first)}</option>` + (values || []).map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  }
+
+  function renderFilterOptions() {
+    fillSelect('filterMunicipio', state.filters.municipios);
+    fillSelect('filterTipo', state.filters.tipos);
+    fillSelect('filterSistema', state.filters.sistemas);
+    fillSelect('filterVersaoInstalada', state.filters.versoes_instaladas);
+    fillSelect('filterVersaoDisponivel', state.filters.versoes_disponiveis);
+  }
+
+  function renderCards() {
+    const s = state.dashboard.summary || {};
+    const cards = [
+      ['Total de unidades monitoradas', s.total, 'Registros em tb_atualizacoes_unidades'],
+      ['Consultaram', s.consultaram, 'Comunicação ou log de consulta'],
+      ['Baixaram', s.baixaram, 'Download concluído registrado'],
+      ['Instalaram', s.instalaram, 'Instalação ou versão atual'],
+      ['Falharam', s.erro, 'Status/log com erro'],
+      ['Offline', s.offline, 'Fora do limite configurado'],
+      ['Versões antigas', s.versoes_antigas, 'Diferente da última publicada'],
+      ['Percentual de sucesso', `${s.taxa_sucesso || 0}%`, `Última publicada: ${s.ultima_publicada || '-'}`]
+    ];
+    document.getElementById('updatesCards').innerHTML = cards.map(([label, value, detail]) => `
+      <div class="updates-card">
+        <div class="updates-card-label">${esc(label)}</div>
+        <div class="updates-card-value">${esc(value ?? 0)}</div>
+        <small>${esc(detail)}</small>
+      </div>
+    `).join('');
+    document.getElementById('offlineThreshold').value = state.dashboard.threshold_minutes || 60;
+  }
+
+  function renderUnits() {
+    document.getElementById('unitsCount').textContent = `${state.units.length} unidade(s)`;
+    const tbody = document.getElementById('unitsTable');
+    if (!state.units.length) {
+      tbody.innerHTML = '<tr><td colspan="17"><div class="updates-empty">Nenhuma unidade encontrada para os filtros atuais.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = state.units.map((item) => `
+      <tr>
+        <td><button class="updates-link" type="button" data-unit="${esc(item.unidade_id)}" data-system="${esc(item.sistema)}">${esc(item.nome_unidade)}</button><br><span class="updates-muted">${esc(item.unidade_id)}</span></td>
+        <td>${esc(item.municipio)}</td>
+        <td>${esc(item.tipo_unidade)}</td>
+        <td>${esc(item.sistema)}</td>
+        <td>${esc(item.versao_instalada)}</td>
+        <td><button class="updates-link" type="button" data-version="${esc(item.versao_disponivel)}">${esc(item.versao_disponivel)}</button></td>
+        <td><span class="${statusClass(item)}">${esc(item.status_calculado)}</span></td>
+        <td>${esc(item.status_label || item.status_atual)}</td>
+        <td>${esc(item.etapa || '-')}</td>
+        <td><div class="updates-error-text" title="${esc(item.mensagem)}">${esc(item.mensagem || '-')}</div></td>
+        <td>${esc(item.ultima_comunicacao)}</td>
+        <td>${esc(item.ultimo_download)}</td>
+        <td>${esc(item.ultima_instalacao)}</td>
+        <td>${esc(item.data_hora_local)}</td>
+        <td>${esc(item.ip_origem)}</td>
+        <td>${esc(item.tempo_instalacao_segundos || '-')}</td>
+        <td><div class="updates-error-text" title="${esc(item.arquivos_ausentes)}">${esc(item.arquivos_ausentes || '-')}</div></td>
+      </tr>
+    `).join('');
+  }
+
+  function renderLogs() {
+    const tbody = document.getElementById('logsTable');
+    if (!state.logs.length) {
+      tbody.innerHTML = '<tr><td colspan="9"><div class="updates-empty">Nenhum evento recebido.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = state.logs.map((item) => `
+      <tr>
+        <td>${esc(item.created_at || '-')}</td>
+        <td><strong>${esc(item.nome_unidade || item.unidade_id)}</strong><br><span class="updates-muted">${esc(item.unidade_id)}</span></td>
+        <td>${esc(item.sistema || '-')}</td>
+        <td>${esc(item.versao_atual || '-')}</td>
+        <td>${esc(item.versao_disponivel || '-')}</td>
+        <td>${esc(item.status || '-')}</td>
+        <td>${esc(item.etapa || '-')}</td>
+        <td><div class="updates-error-text" title="${esc(item.mensagem)}">${esc(item.mensagem || '-')}</div></td>
+        <td>${esc(item.ip_origem || '-')}</td>
+      </tr>
+    `).join('');
+  }
+
+  function destroyChart(name) {
+    if (state.charts[name] && typeof state.charts[name].destroy === 'function') state.charts[name].destroy();
+    state.charts[name] = null;
+  }
+
+  function renderCharts() {
+    if (typeof Chart === 'undefined') return;
+    destroyChart('versions');
+    destroyChart('status');
+    const versions = state.dashboard.by_version || [];
+    state.charts.versions = new Chart(document.getElementById('chartVersions'), {
+      type: 'bar',
+      data: { labels: versions.map((item) => item.versao || '-'), datasets: [{ label: 'Unidades', data: versions.map((item) => Number(item.total || 0)), backgroundColor: '#2563eb' }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+    const counts = {};
+    state.units.forEach((item) => { counts[item.status_calculado] = (counts[item.status_calculado] || 0) + 1; });
+    state.charts.status = new Chart(document.getElementById('chartStatus'), {
+      type: 'doughnut',
+      data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: ['#16a34a', '#f59e0b', '#dc2626', '#2563eb', '#64748b', '#0891b2'] }] },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }
+
+  function currentQuery() {
+    const params = new URLSearchParams();
+    new FormData(document.getElementById('updatesFilters')).forEach((value, key) => {
+      if (String(value || '').trim() !== '') params.set(key, value);
+    });
+    return params;
+  }
+
+  async function refresh() {
+    const query = currentQuery();
+    const res = await fetch(`/admin/api/updates/monitoring?${query.toString()}`, { headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'Falha ao carregar monitoramento.');
+    state.dashboard = data.dashboard || {};
+    state.units = data.units || [];
+    state.logs = data.logs || [];
+    state.filters = data.filters || state.filters;
+    renderAll();
+  }
+
+  async function saveConfig(ev) {
+    ev.preventDefault();
+    const form = new FormData(ev.currentTarget);
+    const res = await fetch('/admin/api/updates/config', { method: 'POST', body: form, headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
+    document.getElementById('configMessage').textContent = data.message || (data.success ? 'Configuração salva.' : 'Falha ao salvar.');
+    await refresh();
+  }
+
+  function detailGrid(items) {
+    return `<div class="updates-detail-grid">${items.map(([label, value]) => `
+      <div class="updates-detail-item"><small>${esc(label)}</small><div>${esc(value || '-')}</div></div>
+    `).join('')}</div>`;
+  }
+
+  function openModal(title, html) {
+    document.getElementById('detailTitle').textContent = title;
+    document.getElementById('detailBody').innerHTML = html;
+    document.getElementById('updatesDetailModal').classList.add('is-open');
+  }
+
+  async function openUnit(unitId, sistema) {
+    const res = await fetch(`/admin/api/updates/unit/${encodeURIComponent(unitId)}?sistema=${encodeURIComponent(sistema || '')}`, { headers: { 'Accept': 'application/json' } });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || 'Falha ao carregar unidade.');
+    const unit = json.data.unit || {};
+    const logs = json.data.logs || [];
+    openModal(`Unidade: ${unit.nome_unidade || unitId}`, `
+      ${detailGrid([
+        ['Unidade', unit.nome_unidade], ['ID', unit.unidade_id], ['Município', unit.municipio],
+        ['Tipo', unit.tipo_unidade], ['Sistema', unit.sistema], ['Versão instalada', unit.versao_instalada],
+        ['Última versão disponível', unit.versao_disponivel], ['Status atual', unit.status_calculado], ['Última comunicação', unit.ultima_comunicacao],
+        ['Último download', unit.ultimo_download], ['Última instalação', unit.ultima_instalacao], ['IP origem', unit.ip_origem]
+      ])}
+      <h3 class="updates-panel-title">Mensagens de erro</h3>
+      <p>${esc(unit.mensagem || '-')}</p>
+      <h3 class="updates-panel-title">Arquivos ausentes</h3>
+      <p>${esc(unit.arquivos_ausentes || '-')}</p>
+      <h3 class="updates-panel-title">Stack trace</h3>
+      <pre class="updates-pre">${esc(unit.stack_trace || '-')}</pre>
+      <h3 class="updates-panel-title">Payload JSON recebido</h3>
+      <pre class="updates-pre">${esc(unit.payload_json || '-')}</pre>
+      <h3 class="updates-panel-title">Histórico da unidade</h3>
+      <div class="updates-table-wrap"><table class="table table-sm table-striped"><thead><tr><th>Data</th><th>Status</th><th>Etapa</th><th>Mensagem</th></tr></thead><tbody>
+        ${logs.map((log) => `<tr><td>${esc(log.created_at)}</td><td>${esc(log.status)}</td><td>${esc(log.etapa || '-')}</td><td>${esc(log.mensagem || '-')}</td></tr>`).join('') || '<tr><td colspan="4">Sem histórico.</td></tr>'}
+      </tbody></table></div>
+    `);
+  }
+
+  async function openVersion(version) {
+    if (!version || version === '-') return;
+    const res = await fetch(`/admin/api/updates/version/${encodeURIComponent(version)}`, { headers: { 'Accept': 'application/json' } });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || 'Falha ao carregar versão.');
+    const data = json.data || {};
+    const v = data.version || {};
+    const s = data.summary || {};
+    const units = data.units || [];
+    openModal(`Versão: ${version}`, `
+      ${detailGrid([
+        ['Versão', v.versao], ['Arquivo ZIP', v.arquivo_zip], ['URL de download', v.url_download],
+        ['Checksum', v.checksum_sha256], ['Publicada em', v.publicado_em], ['Responsável', v.responsavel],
+        ['Unidades que instalaram', s.instaladas], ['Pendentes', s.pendentes], ['Com erro', s.erro],
+        ['Offline', s.offline], ['Percentual de instalação', `${s.percentual_instalacao || 0}%`]
+      ])}
+      <h3 class="updates-panel-title">Changelog</h3>
+      <p>${esc(v.changelog || '-')}</p>
+      <h3 class="updates-panel-title">Unidades da versão</h3>
+      <div class="updates-table-wrap"><table class="table table-sm table-striped"><thead><tr><th>Unidade</th><th>Status</th><th>Instalada</th><th>Comunicação</th></tr></thead><tbody>
+        ${units.map((unit) => `<tr><td>${esc(unit.nome_unidade)}</td><td>${esc(unit.status_calculado)}</td><td>${esc(unit.versao_instalada)}</td><td>${esc(unit.ultima_comunicacao)}</td></tr>`).join('') || '<tr><td colspan="4">Nenhuma unidade vinculada.</td></tr>'}
+      </tbody></table></div>
+    `);
+  }
+
+  function renderAll() {
+    renderCards();
+    renderUnits();
+    renderLogs();
+    renderCharts();
+  }
+
+  document.getElementById('btnRefreshUpdates').addEventListener('click', () => refresh().catch((err) => { document.getElementById('filterMessage').textContent = err.message; }));
+  document.getElementById('updatesFilters').addEventListener('submit', (ev) => { ev.preventDefault(); refresh().catch((err) => { document.getElementById('filterMessage').textContent = err.message; }); });
+  document.getElementById('btnClearFilters').addEventListener('click', () => { document.getElementById('updatesFilters').reset(); refresh().catch((err) => { document.getElementById('filterMessage').textContent = err.message; }); });
+  document.getElementById('offlineConfigForm').addEventListener('submit', saveConfig);
+  document.getElementById('btnCloseDetail').addEventListener('click', () => document.getElementById('updatesDetailModal').classList.remove('is-open'));
+  document.getElementById('unitsTable').addEventListener('click', (ev) => {
+    const unitBtn = ev.target.closest('[data-unit]');
+    const versionBtn = ev.target.closest('[data-version]');
+    if (unitBtn) openUnit(unitBtn.dataset.unit, unitBtn.dataset.system).catch((err) => openModal('Erro', `<p>${esc(err.message)}</p>`));
+    if (versionBtn) openVersion(versionBtn.dataset.version).catch((err) => openModal('Erro', `<p>${esc(err.message)}</p>`));
+  });
+
+  renderFilterOptions();
+  renderAll();
+})();
+</script>

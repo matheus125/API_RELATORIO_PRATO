@@ -1,0 +1,142 @@
+<main class="app-main">
+  <div class="app-content-header">
+    <div class="container-fluid">
+      <div class="portal-page-header">
+        <div class="portal-kicker"><i class="bi bi-building-check"></i> Atualizações das unidades</div>
+        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+          <div>
+            <h1 class="portal-page-title">Unidades Atualizadas</h1>
+            <p class="portal-page-subtitle">Acompanhe quais unidades já sincronizaram seus dados com o portal central.</p>
+          </div>
+          <div class="text-end">
+            <div class="badge bg-light text-primary rounded-pill px-4 py-3 fs-6">
+              {$resumo.atualizadas} unidades atualizadas
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-content">
+    <div class="container-fluid">
+      <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+          <div class="analysis-kpi">
+            <div class="analysis-kpi-label">Atualizadas</div>
+            <div class="analysis-kpi-value text-success">{$resumo.atualizadas}</div>
+            <div class="analysis-kpi-note">Unidades com sincronização concluída.</div>
+          </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+          <div class="analysis-kpi">
+            <div class="analysis-kpi-label">Pendentes</div>
+            <div class="analysis-kpi-value text-warning">{$resumo.pendentes}</div>
+            <div class="analysis-kpi-note">Unidades ainda sem atualização.</div>
+          </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+          <div class="analysis-kpi">
+            <div class="analysis-kpi-label">Com erro</div>
+            <div class="analysis-kpi-value text-danger">{$resumo.erros}</div>
+            <div class="analysis-kpi-note">Última tentativa retornou erro.</div>
+          </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+          <div class="analysis-kpi">
+            <div class="analysis-kpi-label">Total listado</div>
+            <div class="analysis-kpi-value text-primary">{$resumo.total}</div>
+            <div class="analysis-kpi-note">Resultado conforme filtros ativos.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Filtros</h3>
+        </div>
+        <div class="card-body">
+          <form method="get" action="/admin/unidades-atualizadas" class="row g-3 align-items-end">
+            <div class="col-lg-3 col-md-6">
+              <label class="form-label fw-bold">Unidade</label>
+              <input type="text" class="form-control" name="unidade" value="{$filtros.unidade}" placeholder="Nome, banco ou identificador">
+            </div>
+            <div class="col-lg-3 col-md-6">
+              <label class="form-label fw-bold">Tipo de unidade</label>
+              <select class="form-select" name="tipo_unidade">
+                <option value="">Todos</option>
+                <option value="Unidade de atendimento" {if="$filtros.tipo_unidade=='Unidade de atendimento'"}selected{/if}>Unidade de atendimento</option>
+              </select>
+            </div>
+            <div class="col-lg-2 col-md-6">
+              <label class="form-label fw-bold">Data</label>
+              <input type="date" class="form-control" name="data_atualizacao" value="{$filtros.data_atualizacao}">
+            </div>
+            <div class="col-lg-2 col-md-6">
+              <label class="form-label fw-bold">Status</label>
+              <select class="form-select" name="status">
+                <option value="">Todos</option>
+                <option value="ATUALIZADA" {if="$filtros.status=='ATUALIZADA'"}selected{/if}>Atualizada</option>
+                <option value="PENDENTE" {if="$filtros.status=='PENDENTE'"}selected{/if}>Pendente</option>
+                <option value="ERRO" {if="$filtros.status=='ERRO'"}selected{/if}>Erro</option>
+              </select>
+            </div>
+            <div class="col-lg-2 col-md-12 d-grid gap-2">
+              <button type="submit" class="btn btn-primary"><i class="bi bi-funnel me-1"></i> Filtrar</button>
+              <a href="/admin/unidades-atualizadas" class="btn btn-light border"><i class="bi bi-eraser me-1"></i> Limpar</a>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <h3 class="card-title mb-0">Listagem de unidades</h3>
+          <span class="text-muted small">Dados reais de <code>tb_bases_consulta</code></span>
+        </div>
+        <div class="card-body p-0 table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Unidade</th>
+                <th>Tipo</th>
+                <th>Data da última atualização</th>
+                <th>Hora</th>
+                <th>Status</th>
+                <th>Detalhes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {if="count($unidades) > 0"}
+                {loop="$unidades"}
+                <tr class="border-start border-4 border-{$value.status_class}">
+                  <td>
+                    <div class="fw-bold">{$value.nome_unidade}</div>
+                    <div class="text-muted small">Banco: {$value.nome_banco}</div>
+                  </td>
+                  <td>{$value.tipo_unidade}</td>
+                  <td>{$value.data_atualizacao}</td>
+                  <td>{$value.hora_atualizacao}</td>
+                  <td>
+                    <span class="badge rounded-pill px-3 py-2 badge-soft-{$value.status_class}">
+                      {$value.status_label}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="text-muted small">Último status: {$value.ultimo_status}</div>
+                    <div class="text-muted small">{$value.ultima_mensagem}</div>
+                  </td>
+                </tr>
+                {/loop}
+              {else}
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">Nenhuma unidade encontrada para os filtros informados.</td>
+                </tr>
+              {/if}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>

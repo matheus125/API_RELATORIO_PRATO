@@ -17,7 +17,8 @@ class PerfilMiddleware extends Middleware
         $rotasPublicas = [
             '/',
             '/login',
-            '/admin/login'
+            '/admin/login',
+            '/api/updates/status'
         ];
 
         if (in_array($path, $rotasPublicas, true)) {
@@ -26,6 +27,12 @@ class PerfilMiddleware extends Middleware
         }
 
         if (!Funcionarios::checkLogin()) {
+            if (strpos($path, '/api/') === 0) {
+                http_response_code(401);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'message' => 'Sessao expirada.']);
+                exit;
+            }
             header('Location: /admin/login');
             exit;
         }
@@ -38,6 +45,13 @@ class PerfilMiddleware extends Middleware
                 $path,
                 $requiredPermission
             );
+
+            if (strpos($path, '/api/') === 0) {
+                http_response_code(403);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'message' => 'Acesso negado.']);
+                exit;
+            }
 
             header('Location: /acesso-negado');
             exit;

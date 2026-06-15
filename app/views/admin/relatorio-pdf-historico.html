@@ -463,6 +463,19 @@
         pointer-events: none
     }
 
+    .check-cell {
+        text-align: center;
+        width: 48px
+    }
+
+    .row-check,
+    #selectAllRows {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary);
+        cursor: pointer
+    }
+
     .footer {
         display: flex;
         justify-content: space-between;
@@ -810,7 +823,7 @@
                         <div class="search-wrap">
                             <span class="search-icon">🔎</span>
                             <input id="busca" class="input" type="text"
-                                placeholder="Arquivo, responsável, CPF, erro...">
+                                placeholder="Unidade, arquivo, responsável, CPF...">
                         </div>
                     </div>
 
@@ -839,6 +852,8 @@
                     </div>
 
                     <button class="btn btn-soft" type="button" onclick="PDFDASH.carregar(1)">Filtrar</button>
+                    <button class="btn btn-soft" type="button" onclick="PDFDASH.baixarSelecionados()">Baixar selecionados</button>
+                    <button class="btn btn-soft" type="button" onclick="PDFDASH.baixarTodosBusca()">Baixar todos da busca</button>
                     <button class="btn btn-soft" type="button" onclick="PDFDASH.exportarCSV()">Exportar CSV</button>
                     <button class="btn btn-soft" type="button" onclick="window.print()">Imprimir tela</button>
                 </div>
@@ -857,6 +872,7 @@
                 <table class="table">
                     <thead>
                         <tr>
+                            <th class="check-cell"><input id="selectAllRows" type="checkbox" title="Selecionar todos"></th>
                             <th style="width:90px">ID</th>
                             <th>Arquivo</th>
                             <th style="width:130px">Data relatório</th>
@@ -869,7 +885,7 @@
                     </thead>
                     <tbody id="tabelaBody">
                         <tr>
-                            <td colspan="8">
+                            <td colspan="9">
                                 <div class="empty">
                                     <div class="empty-icon">📄</div>
                                     <div>Carregando histórico...</div>
@@ -910,6 +926,7 @@
             pageSize: 20,
             items: [],
             filteredItems: [],
+            selectedIds: new Set(),
             reenviando: {},
             autoRefreshMs: 30000
         };
@@ -919,6 +936,7 @@
             data: document.getElementById('data'),
             status: document.getElementById('status'),
             pageSize: document.getElementById('pageSize'),
+            selectAllRows: document.getElementById('selectAllRows'),
             tabelaBody: document.getElementById('tabelaBody'),
             paginacao: document.getElementById('paginacao'),
             resumo: document.getElementById('resumo'),
@@ -1014,6 +1032,7 @@
             const params = new URLSearchParams();
             params.set('page', page || 1);
             params.set('pageSize', els.pageSize.value || 20);
+            if (els.busca.value) params.set('busca', els.busca.value);
             if (els.data.value) params.set('data', els.data.value);
             if (els.status.value) params.set('status', els.status.value);
             return params.toString();
@@ -1033,6 +1052,10 @@
                     item.mensagem_erro,
                     item.responsavel,
                     item.cpf_responsavel,
+                    item.nome_unidade,
+                    item.unidade,
+                    item.unidade_nome,
+                    item.nome_banco,
                     item.data_relatorio,
                     item.data_geracao,
                     item.data_upload
@@ -1067,17 +1090,48 @@
                 : 'Nenhum registro retornado para os filtros informados.';
         }
 
+        function idsPaginaAtual() {
+            return state.filteredItems
+                .map(item => Number(item.id))
+                .filter(id => id > 0);
+        }
+
+        function syncSelectAll() {
+            if (!els.selectAllRows) return;
+            const ids = idsPaginaAtual();
+            const selecionados = ids.filter(id => state.selectedIds.has(id)).length;
+            els.selectAllRows.checked = ids.length > 0 && selecionados === ids.length;
+            els.selectAllRows.indeterminate = selecionados > 0 && selecionados < ids.length;
+        }
+
+        function toggleSelecionado(id, checked) {
+            id = Number(id);
+            if (id <= 0) return;
+            if (checked) state.selectedIds.add(id);
+            else state.selectedIds.delete(id);
+            syncSelectAll();
+        }
+
+        function selecionarTodosPagina(checked) {
+            idsPaginaAtual().forEach(id => {
+                if (checked) state.selectedIds.add(id);
+                else state.selectedIds.delete(id);
+            });
+            renderTable();
+        }
+
         function renderTable() {
             const items = state.filteredItems;
+            syncSelectAll();
 
             if (!items.length) {
                 els.tabelaBody.innerHTML = `
                 <tr>
-                    <td colspan="8">
+                    <td colspan="9">
                         <div class="empty">
                             <div class="empty-icon">📂</div>
                             <div><strong>Nenhum relatório encontrado</strong></div>
-                            <div style="margin-top:6px;">Tente outro filtro ou gere um novo relatório.</div>
+                            <div style="margin-top:6px;">Tente outro filtro ou pesquise pelo nome da unidade.</div>
                         </div>
                     </td>
                 </tr>
@@ -1089,8 +1143,12 @@
                 const reenviando = !!state.reenviando[item.id];
                 const isErro = normalizeStatus(item.status_upload) === 'ERRO';
                 const podeReenviar = !!item.data_relatorio;
+                const checked = state.selectedIds.has(Number(item.id)) ? 'checked' : '';
                 return `
                 <tr class="${isErro ? 'row-error' : ''}">
+                    <td class="check-cell">
+                        <input class="row-check" type="checkbox" ${checked} onchange="PDFDASH.toggleSelecionado(${Number(item.id)}, this.checked)" aria-label="Selecionar PDF #${escapeHtml(item.id)}">
+                    </td>
                     <td><strong>#${escapeHtml(item.id)}</strong></td>
                     <td>
                         <div class="file-stack">
@@ -1519,11 +1577,83 @@
             URL.revokeObjectURL(url);
         }
 
+        function filtrosAtuais() {
+            return {
+                busca: els.busca.value || '',
+                data: els.data.value || '',
+                status: els.status.value || ''
+            };
+        }
+
+        function nomeArquivoResposta(resp) {
+            const header = resp.headers.get('Content-Disposition') || '';
+            const match = header.match(/filename="?([^";]+)"?/i);
+            return match ? match[1] : 'relatorios_pdf_unidade.zip';
+        }
+
+        async function baixarLote(payload, mensagemSucesso) {
+            try {
+                const resp = await fetch('/admin/relatorio/pdf/download-lote', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/zip, application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const contentType = resp.headers.get('Content-Type') || '';
+                if (!resp.ok || contentType.includes('application/json')) {
+                    const data = await resp.json().catch(() => ({}));
+                    throw new Error(data.message || 'Não foi possível gerar o ZIP.');
+                }
+
+                const blob = await resp.blob();
+                if (!blob.size) {
+                    throw new Error('O ZIP foi gerado vazio.');
+                }
+
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = nomeArquivoResposta(resp);
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+
+                const ausentes = Number(resp.headers.get('X-PDF-Zip-Missing') || 0);
+                if (ausentes > 0) {
+                    toast(`ZIP gerado, mas ${ausentes} PDF(s) não existiam no servidor. A lista foi incluída no ZIP.`, 'warning');
+                } else {
+                    toast(mensagemSucesso || 'ZIP gerado com sucesso.', 'success');
+                }
+            } catch (error) {
+                toast(error.message || 'Falha ao baixar PDFs.', 'error');
+            }
+        }
+
+        function baixarSelecionados() {
+            const ids = Array.from(state.selectedIds);
+            if (!ids.length) {
+                toast('Selecione pelo menos um PDF para baixar.', 'warning');
+                return;
+            }
+
+            baixarLote({ ids }, 'ZIP dos PDFs selecionados gerado com sucesso.');
+        }
+
+        function baixarTodosBusca() {
+            baixarLote({ filters: filtrosAtuais() }, 'ZIP com todos os PDFs da busca gerado com sucesso.');
+        }
+
         function limparFiltros() {
             els.busca.value = '';
             els.data.value = '';
             els.status.value = '';
             els.pageSize.value = '20';
+            state.selectedIds.clear();
             carregar(1);
         }
 
@@ -1533,7 +1663,7 @@
 
             els.tabelaBody.innerHTML = `
             <tr>
-                <td colspan="8">
+                <td colspan="9">
                     <div class="empty">
                         <div class="empty-icon">⏳</div>
                         <div>Carregando histórico...</div>
@@ -1558,6 +1688,7 @@
                 state.total = Number(data.total || 0);
                 state.items = Array.isArray(data.items) ? data.items : [];
                 state.filteredItems = aplicarBuscaClientSide(state.items);
+                syncSelectAll();
 
                 renderTable();
                 renderPagination();
@@ -1565,7 +1696,7 @@
             } catch (error) {
                 els.tabelaBody.innerHTML = `
                 <tr>
-                    <td colspan="8">
+                    <td colspan="9">
                         <div class="empty">
                             <div class="empty-icon">⚠️</div>
                             <div><strong>Não foi possível carregar o histórico.</strong></div>
@@ -1579,10 +1710,17 @@
             }
         }
 
+        let buscaTimer = null;
         els.busca.addEventListener('input', function () {
-            state.filteredItems = aplicarBuscaClientSide(state.items);
-            renderTable();
-            renderAnalytics();
+            clearTimeout(buscaTimer);
+            buscaTimer = setTimeout(() => {
+                state.selectedIds.clear();
+                carregar(1);
+            }, 350);
+        });
+
+        els.selectAllRows.addEventListener('change', function () {
+            selecionarTodosPagina(this.checked);
         });
 
         els.pageSize.addEventListener('change', function () {
@@ -1600,7 +1738,11 @@
             reenviarFalhas,
             verDetalhes,
             fecharModal,
-            exportarCSV
+            exportarCSV,
+            toggleSelecionado,
+            selecionarTodosPagina,
+            baixarSelecionados,
+            baixarTodosBusca
         };
 
         carregar(1);

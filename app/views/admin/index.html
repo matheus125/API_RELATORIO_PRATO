@@ -19,6 +19,12 @@
 
   <div class="app-content">
     <div class="container-fluid">
+      {if="$dashboardDbError != ''"}
+      <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+        <i class="bi bi-exclamation-triangle"></i>
+        <div>{$dashboardDbError}</div>
+      </div>
+      {/if}
       <div class="row g-3 mb-4">
         <div class="col-xl-3 col-md-6">
           <div class="small-box text-bg-primary shadow-sm rounded-4">
@@ -37,6 +43,17 @@
             </div>
             <i class="small-box-icon bi bi-person-check"></i>
           </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+          <a href="/admin/unidades-atualizadas" class="text-decoration-none">
+            <div class="small-box text-bg-info shadow-sm rounded-4">
+              <div class="inner">
+                <h3>{$stats.unidades_atualizadas}</h3>
+                <p>Unidades atualizadas</p>
+              </div>
+              <i class="small-box-icon bi bi-building-check"></i>
+            </div>
+          </a>
         </div>
         <div class="col-xl-3 col-md-6">
           <div class="small-box text-bg-warning shadow-sm rounded-4">
@@ -159,10 +176,10 @@
     new Chart(canvas, {
       type: 'bar',
       data: {
-        labels: ['Funcionários', 'Usuários ativos', 'Logs hoje', 'Negados hoje'],
+        labels: ['Funcionários', 'Usuários ativos', 'Unidades atualizadas', 'Logs hoje', 'Negados hoje'],
         datasets: [{
           label: 'Quantidade',
-          data: ["{$stats.total_funcionarios|default:0}", "{$stats.usuarios_ativos|default:0}", "{$stats.logs_hoje|default:0}", "{$stats.acessos_negados_hoje|default:0}"],
+          data: {$dashboardChartData},
           borderRadius: 14,
           maxBarThickness: 56
         }]
