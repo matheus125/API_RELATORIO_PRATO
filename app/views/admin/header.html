@@ -412,6 +412,15 @@
             {/if}
 
             <li class="nav-header">Cadastros</li>
+            {if="canAccess('GADSAN_VIEW')"}
+            <li class="nav-item"><a href="/admin/gadsan" class="nav-link"><i class="nav-icon bi bi-person-vcard"></i><p>Colaboradores GADSAN</p></a></li>
+            {/if}
+            {if="canAccess('GADSAN_AUX')"}
+            <li class="nav-item"><a href="/admin/gadsan/auxiliares" class="nav-link"><i class="nav-icon bi bi-collection"></i><p>Cadastros GADSAN</p></a></li>
+            {/if}
+            {if="canAccess('GADSAN_IMPORT')"}
+            <li class="nav-item"><a href="/admin/gadsan/importacoes" class="nav-link"><i class="nav-icon bi bi-file-earmark-spreadsheet"></i><p>Importações GADSAN</p></a></li>
+            {/if}
             {if="canAccess('FUNCIONARIOS_VIEW')"}
             <li class="nav-item"><a href="/admin/funcionarios" class="nav-link"><i class="nav-icon bi bi-people"></i><p>Funcionários</p></a></li>
             {/if}

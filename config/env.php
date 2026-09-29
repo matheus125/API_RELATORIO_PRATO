@@ -68,3 +68,14 @@ if (!function_exists('portal_env')) {
         return ($value === false || $value === '') ? $default : $value;
     }
 }
+
+if (!function_exists('portal_env_bool')) {
+    function portal_env_bool(string $key, bool $default = false): bool
+    {
+        $value = portal_env($key, null);
+        if ($value === null) {
+            return $default;
+        }
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $default;
+    }
+}

@@ -10,6 +10,10 @@ class Permissions
         return [
             'DASHBOARD_VIEW' => ['description' => 'Visualizar dashboard', 'module_name' => 'DASHBOARD'],
 
+            'GADSAN_VIEW' => ['description' => 'Visualizar colaboradores GADSAN', 'module_name' => 'GADSAN'],
+            'GADSAN_EDIT' => ['description' => 'Cadastrar e editar colaboradores GADSAN', 'module_name' => 'GADSAN'],
+            'GADSAN_AUX' => ['description' => 'Gerenciar cadastros auxiliares GADSAN', 'module_name' => 'GADSAN'],
+            'GADSAN_IMPORT' => ['description' => 'Importar e revisar dados GADSAN', 'module_name' => 'GADSAN'],
             'FUNCIONARIOS_VIEW' => ['description' => 'Visualizar funcionários', 'module_name' => 'FUNCIONARIOS'],
             'FUNCIONARIOS_CREATE' => ['description' => 'Cadastrar funcionários', 'module_name' => 'FUNCIONARIOS'],
             'FUNCIONARIOS_UPDATE' => ['description' => 'Editar funcionários', 'module_name' => 'FUNCIONARIOS'],

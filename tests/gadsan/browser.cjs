@@ -1,0 +1,83 @@
+const fs = require('fs');
+const assert = require('assert/strict');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const base = process.env.GADSAN_UI_URL || 'http://127.0.0.1:8082';
+const sessions = JSON.parse(fs.readFileSync('/tmp/gadsan-ui-sessions.json','utf8'));
+if (fs.existsSync('/tmp/gadsan-ui-records.json')) {
+ const previous=JSON.parse(fs.readFileSync('/tmp/gadsan-ui-records.json','utf8'));
+ if(Object.values(previous).some(v=>v.length)) throw new Error('Execute browser-fixture.php cleanup antes de repetir os testes.');
+}
+const records = {people:[],catalogs:[],imports:[]};
+const record = () => fs.writeFileSync('/tmp/gadsan-ui-records.json',JSON.stringify(records),{mode:0o600});
+record();
+(async () => {
+ const browser=await chromium.launch({headless:true});
+ const context=await browser.newContext({viewport:{width:1440,height:1000}});
+ await context.addCookies([{name:'PHPSESSID',value:sessions.ADMIN,url:base}]);
+ const page=await context.newPage();let checks=0;const errors=[];page.on('pageerror',e=>errors.push(e.name));
+ page.on('response',r=>{if(r.request().resourceType()==='document' && r.status()>=500)errors.push('HTTP '+r.status());});
+ try {
+  let r=await page.goto(base+'/admin/gadsan');assert.equal(r.status(),200);checks++;
+  assert.equal(await page.locator('h2').first().textContent(),'Colaboradores');checks++;
+  await page.locator('a[href="/admin/gadsan/colaboradores/novo"]').click();
+  await page.waitForSelector('input[name="nome"]');
+  const csrf=await page.locator('input[name="_csrf"]').inputValue();
+  r=await context.request.post(base+'/admin/gadsan/colaboradores/novo',{form:{nome:'Teste CSRF'}});assert.equal(r.status(),403);checks++;
+  r=await context.request.post(base+'/admin/gadsan/colaboradores/novo',{form:{_csrf:csrf,_complete:'1',nome:'Teste validação',cpf:'11111111111'}});assert.equal(r.status(),422);checks++;
+  r=await context.request.post(base+'/admin/gadsan/colaboradores/novo',{form:{_csrf:csrf,nome:'Formulário incompleto'}});assert.equal(r.status(),422);checks++;
+  r=await context.request.post(base+'/admin/gadsan/colaboradores/novo',{form:{_csrf:csrf,_complete:'1',nome:'<img src=x onerror=alert(1)>',cpf:'11111111111'}});assert.equal(r.status(),422);assert((await r.text()).includes('&lt;img'));checks++;
+  await page.getByRole('button',{name:'+ Adicionar alocação',exact:true}).click();
+  assert.equal(await page.locator('[data-repeat="allocations"] [data-row]').count(),2);checks++;
+  await page.getByRole('button',{name:'+ Adicionar escolaridade',exact:true}).click();
+  assert.equal(await page.locator('[data-repeat="education"] [data-row]').count(),2);checks++;
+  await page.locator('[data-repeat="allocations"] [data-row]').last().getByRole('button',{name:'Remover esta alocação'}).click();
+  const tag='Validação UI '+Date.now();
+  await page.locator('input[name="nome"]').fill(tag);
+  await page.locator('input[name="email"]').fill('TESTE@EXAMPLE.COM');
+  await page.locator('input[name="telefone"]').fill('98451-8200');
+  await page.locator('input[name="alocacoes[0][matricula]"]').fill('00042');
+  await page.locator('input[name="alocacoes[0][carga_horaria_semanal]"]').fill('40');
+  await page.screenshot({path:'/tmp/gadsan-form-desktop.png',fullPage:true});
+  await Promise.all([page.waitForURL(/\/colaboradores\/\d+$/),page.getByRole('button',{name:'Salvar colaborador',exact:true}).click()]);
+  const id=Number(page.url().split('/').pop());records.people.push(id);record();
+  assert.equal(await page.locator('input[name="email"]').inputValue(),'teste@example.com');checks++;
+  assert.equal(await page.locator('input[name="telefone"]').inputValue(),'98451-8200');checks++;
+  await page.locator('input[name="nome"]').fill(tag+' atualizado');
+  await Promise.all([page.waitForNavigation(),page.getByRole('button',{name:'Salvar colaborador',exact:true}).click()]);
+  assert.equal(await page.locator('input[name="nome"]').inputValue(),tag+' atualizado');checks++;
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:'/tmp/gadsan-form-mobile.png',fullPage:true});
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));checks++;
+  await page.goto(base+'/admin/gadsan/auxiliares?tipo=cargos');
+  await page.locator('input[name="nome"]').fill(tag+' cargo');
+  await Promise.all([page.waitForNavigation(),page.getByRole('button',{name:'Salvar opção',exact:true}).click()]);
+  const row=page.locator('tr').filter({hasText:tag+' cargo'});assert.equal(await row.count(),1);checks++;
+  const href=await row.getByRole('link',{name:'Editar'}).getAttribute('href');records.catalogs.push({table:'cargos',id:Number(new URL(href,base).searchParams.get('editar'))});record();
+  await page.goto(base+'/admin/gadsan/colaboradores/'+id);
+  await page.getByRole('button',{name:'Atualizar opções',exact:true}).click();
+  await page.getByText('Opções atualizadas. Seus dados foram mantidos.').waitFor();checks++;
+  assert.equal(await page.locator('input[name="nome"]').inputValue(),tag+' atualizado');checks++;
+  for(const table of ['instituicoes','projetos','lotacoes','municipios','vinculos','naturezas_contratacao','turnos','escolaridades','formacoes']){
+    r=await page.goto(base+'/admin/gadsan/auxiliares?tipo='+table);assert.equal(r.status(),200);checks++;
+  }
+  await page.goto(base+'/admin/gadsan/importacoes');
+  await page.locator('input[type="file"]').setInputFiles('/tmp/gadsan-ui-fixture.xlsx');
+  await page.locator('input[name="confirmar"]').check();
+  await Promise.all([page.waitForURL(/\/importacoes\/\d+$/),page.getByRole('button',{name:'Validar e importar',exact:true}).click()]);
+  const importId=Number(page.url().split('/').pop());records.imports.push(importId);record();
+  assert.equal((await page.request.get(page.url())).status(),200);checks++;
+  await page.getByText('Página 1',{exact:true}).waitFor();checks++;
+  assert.equal(await page.getByRole('link',{name:'Ver origem e alertas'}).count(),2);checks++;
+  await page.getByRole('link',{name:'Ver origem e alertas'}).first().click();
+  await page.getByRole('heading',{name:'Valores originais'}).waitFor();checks++;
+  const resolve=page.getByRole('button',{name:'Marcar como resolvida'}).first();
+  await Promise.all([page.waitForNavigation(),resolve.click()]);
+  assert(await page.getByRole('button',{name:'Reabrir pendência'}).count());checks++;
+  const restricted=await browser.newContext();await restricted.addCookies([{name:'PHPSESSID',value:sessions.CONSULTA,url:base}]);
+  r=await restricted.request.get(base+'/admin/gadsan/colaboradores/'+id,{maxRedirects:0});assert.equal(r.status(),302);assert.equal(r.headers().location,'/acesso-negado');checks++;
+  r=await restricted.request.post(base+'/admin/gadsan/colaboradores/novo',{form:{_csrf:csrf,nome:'Sem acesso'},maxRedirects:0});assert.equal(r.status(),302);checks++;
+  const anon=await browser.newContext();r=await anon.request.get(base+'/admin/gadsan',{maxRedirects:0});assert.equal(r.status(),302);assert.equal(r.headers().location,'/admin/login');checks++;
+  assert.equal(errors.length,0);checks++;
+  console.log(`OK: ${checks} verificações de navegador (cadastro, edição, auxiliares, upload, revisão, CSRF, permissões e celular).`);
+ } catch (e) { await page.screenshot({path:'/tmp/gadsan-test-failure.png',fullPage:true}); throw e; } finally {await browser.close();}
+})().catch(e=>{console.error(e.message);process.exitCode=1;});

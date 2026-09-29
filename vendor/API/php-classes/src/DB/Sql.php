@@ -4,15 +4,17 @@ namespace Hcode\DB;
 
 class Sql
 {
-	const HOSTNAME = "69.6.249.161";
-	const USERNAME = "mat06153_mat06153";
-	const PASSWORD = "MM@t@13192921";
-	const DBNAME   = "mat06153_portal_relatorios";
+	const HOSTNAME = "127.0.0.1";
+	const USERNAME = "dev";
+	const PASSWORD = "";
+	const DBNAME   = "portal_relatorios";
 
 	private $conn;
 
 	public function __construct()
 	{
+		require_once dirname(__DIR__, 5) . "/config/env.php";
+		\portal_load_env(dirname(__DIR__, 5) . "/.env");
 		$host = self::env('DB_HOST', self::HOSTNAME);
 		$user = self::env('DB_USER', self::USERNAME);
 		$password = self::env('DB_PASSWORD', self::PASSWORD);

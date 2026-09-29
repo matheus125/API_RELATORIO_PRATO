@@ -1,0 +1,6 @@
+.env
+storage/cache/
+storage/keys/
+storage/logs/
+storage/source-sync/
+storage/updates/

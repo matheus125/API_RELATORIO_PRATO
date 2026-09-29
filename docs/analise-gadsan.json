@@ -1,0 +1,140 @@
+{
+    "modo": "importacao",
+    "arquivo": "Banco de Dados GADSAN 2025 18.02.2025.xlsx",
+    "sha256": "7622f94f2d5dc45edf268aef34750224ad9c1f293f1533850c479af4fde0bbd5",
+    "abas": {
+        "GADSAN": {
+            "registros": 9,
+            "linhas_ignoradas": 7,
+            "cabecalhos": [
+                3
+            ],
+            "importados": 9
+        },
+        "GADSAN - PRATO CHEIO CAPITAL ": {
+            "registros": 95,
+            "linhas_ignoradas": 7,
+            "cabecalhos": [
+                3,
+                27
+            ],
+            "importados": 95
+        },
+        "GADSAN - PRATO CHEIO INTERIOR": {
+            "registros": 88,
+            "linhas_ignoradas": 7,
+            "cabecalhos": [
+                3,
+                37
+            ],
+            "ignorados": 1,
+            "importados": 87
+        }
+    },
+    "total_linhas": 192,
+    "total_importados": 191,
+    "total_atualizados": 0,
+    "total_ignorados": 1,
+    "total_inconsistencias": 282,
+    "inconsistencias": {
+        "campo_obrigatorio_ausente": 1,
+        "classificacao_revisar": 5,
+        "cpf_invalido": 12,
+        "data_invalida": 9,
+        "data_suspeita": 2,
+        "email_invalido": 2,
+        "email_suspeito": 2,
+        "escolaridade_ambigua": 6,
+        "formacao_ambigua": 10,
+        "formacao_ocupacao": 11,
+        "identificador_numerico_excel": 107,
+        "identificadores_conflitantes": 1,
+        "lotacao_ambigua": 9,
+        "matricula_duplicada": 1,
+        "telefone_invalido": 5,
+        "telefone_sem_ddd": 93,
+        "valor_suspeito": 6
+    },
+    "inconsistencias_por_aba": {
+        "GADSAN": {
+            "telefone_invalido": 1,
+            "email_suspeito": 2,
+            "telefone_sem_ddd": 3,
+            "cpf_invalido": 1,
+            "data_suspeita": 1,
+            "lotacao_ambigua": 1,
+            "identificador_numerico_excel": 3,
+            "formacao_ambigua": 1,
+            "valor_suspeito": 1
+        },
+        "GADSAN - PRATO CHEIO CAPITAL ": {
+            "telefone_sem_ddd": 85,
+            "formacao_ambigua": 5,
+            "valor_suspeito": 4,
+            "identificador_numerico_excel": 69,
+            "lotacao_ambigua": 8,
+            "classificacao_revisar": 3,
+            "formacao_ocupacao": 5,
+            "telefone_invalido": 2,
+            "cpf_invalido": 4,
+            "escolaridade_ambigua": 5,
+            "data_invalida": 5,
+            "matricula_duplicada": 1,
+            "identificadores_conflitantes": 1,
+            "email_invalido": 1,
+            "data_suspeita": 1
+        },
+        "GADSAN - PRATO CHEIO INTERIOR": {
+            "campo_obrigatorio_ausente": 1,
+            "identificador_numerico_excel": 35,
+            "classificacao_revisar": 2,
+            "formacao_ocupacao": 6,
+            "cpf_invalido": 7,
+            "telefone_invalido": 2,
+            "formacao_ambigua": 4,
+            "valor_suspeito": 1,
+            "data_invalida": 4,
+            "telefone_sem_ddd": 5,
+            "escolaridade_ambigua": 1,
+            "email_invalido": 1
+        }
+    },
+    "campos_ausentes": {
+        "tipo_sanguineo": 81,
+        "data_admissao": 12,
+        "matricula": 33,
+        "carga_horaria_semanal": 2,
+        "escolaridade": 2,
+        "formacao": 2,
+        "data_nascimento": 5,
+        "rg": 23,
+        "cpf": 5,
+        "email": 5,
+        "endereco": 5,
+        "turno": 2,
+        "vinculo": 3,
+        "telefone": 3,
+        "nome": 1
+    },
+    "importacao_id": 1,
+    "banco_validacao": "gadsan_validacao_20260928_225712_excel",
+    "tabelas": {
+        "alocacoes_colaborador": 191,
+        "cargos": 18,
+        "colaborador_escolaridade": 184,
+        "colaborador_formacao": 60,
+        "colaboradores": 191,
+        "escolaridades": 4,
+        "formacoes": 28,
+        "importacao_inconsistencias": 282,
+        "importacao_origens": 192,
+        "importacoes": 1,
+        "instituicoes": 2,
+        "lotacoes": 60,
+        "municipios": 0,
+        "naturezas_contratacao": 1,
+        "projetos": 11,
+        "turnos": 3,
+        "vinculos": 8
+    }
+}

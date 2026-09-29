@@ -1,0 +1,230 @@
+-- MySQL >= 8.0.16 (CHECK constraints enforced). Execute in a dedicated database.
+SET NAMES utf8mb4;
+
+CREATE TABLE cargos (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(255) NOT NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_cargos_nome (nome)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE instituicoes (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(255) NOT NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_instituicoes_nome (nome)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE projetos (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(255) NOT NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_projetos_nome (nome)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE vinculos (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(255) NOT NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_vinculos_nome (nome)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE turnos (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(255) NOT NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_turnos_nome (nome)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE escolaridades (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(255) NOT NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_escolaridades_nome (nome)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE formacoes (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(255) NOT NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_formacoes_nome (nome)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE naturezas_contratacao (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(255) NOT NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_naturezas_contratacao_nome (nome)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE municipios (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(120) NOT NULL,
+  uf CHAR(2) NOT NULL,
+  codigo_ibge VARCHAR(7) NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_municipio (nome, uf),
+  UNIQUE KEY uq_ibge (codigo_ibge)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE lotacoes (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(255) NOT NULL,
+  tipo VARCHAR(30) NOT NULL DEFAULT 'nao_classificada',
+  municipio_id BIGINT UNSIGNED NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_lotacao (nome),
+  FOREIGN KEY (municipio_id) REFERENCES municipios(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE colaboradores (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(255) NOT NULL,
+  cpf VARCHAR(32) NULL,
+  cpf_validado BOOLEAN NOT NULL DEFAULT FALSE,
+  cpf_unico VARCHAR(11) GENERATED ALWAYS AS (CASE WHEN cpf_validado THEN cpf ELSE NULL END) STORED,
+  rg VARCHAR(100) NULL,
+  data_nascimento DATE NULL,
+  email VARCHAR(320) NULL,
+  telefone VARCHAR(64) NULL,
+  endereco TEXT NULL,
+  tipo_sanguineo VARCHAR(3) NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_cpf_validado (cpf_unico),
+  KEY ix_cpf (cpf),
+  KEY ix_nome_nascimento (nome, data_nascimento),
+  CHECK (cpf_validado = FALSE OR (cpf IS NOT NULL AND cpf REGEXP '^[0-9]{11}$')),
+  CHECK (tipo_sanguineo IS NULL OR tipo_sanguineo IN ('A+','A-','B+','B-','AB+','AB-','O+','O-'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE alocacoes_colaborador (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  colaborador_id BIGINT UNSIGNED NOT NULL,
+  cargo_id BIGINT UNSIGNED NULL,
+  projeto_id BIGINT UNSIGNED NULL,
+  lotacao_id BIGINT UNSIGNED NULL,
+  instituicao_id BIGINT UNSIGNED NULL,
+  vinculo_id BIGINT UNSIGNED NULL,
+  natureza_contratacao_id BIGINT UNSIGNED NULL,
+  turno_id BIGINT UNSIGNED NULL,
+  matricula VARCHAR(100) NULL,
+  carga_horaria_semanal SMALLINT UNSIGNED NULL,
+  data_admissao DATE NULL,
+  data_inicio DATE NULL,
+  data_fim DATE NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY ix_matricula (matricula),
+  KEY ix_colaborador_periodo (colaborador_id, data_inicio, data_fim),
+  FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id),
+  FOREIGN KEY (cargo_id) REFERENCES cargos(id),
+  FOREIGN KEY (projeto_id) REFERENCES projetos(id),
+  FOREIGN KEY (lotacao_id) REFERENCES lotacoes(id),
+  FOREIGN KEY (instituicao_id) REFERENCES instituicoes(id),
+  FOREIGN KEY (vinculo_id) REFERENCES vinculos(id),
+  FOREIGN KEY (natureza_contratacao_id) REFERENCES naturezas_contratacao(id),
+  FOREIGN KEY (turno_id) REFERENCES turnos(id),
+  CHECK (carga_horaria_semanal IS NULL OR carga_horaria_semanal BETWEEN 1 AND 168),
+  CHECK (data_fim IS NULL OR data_inicio IS NULL OR data_fim >= data_inicio)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE colaborador_formacao (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  colaborador_id BIGINT UNSIGNED NOT NULL,
+  formacao_id BIGINT UNSIGNED NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_colaborador_formacao (colaborador_id, formacao_id),
+  FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id),
+  FOREIGN KEY (formacao_id) REFERENCES formacoes(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE colaborador_escolaridade (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  colaborador_id BIGINT UNSIGNED NOT NULL,
+  escolaridade_id BIGINT UNSIGNED NOT NULL,
+  situacao VARCHAR(20) NOT NULL DEFAULT 'Nao informado',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_colaborador_escolaridade (colaborador_id, escolaridade_id, situacao),
+  FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id),
+  FOREIGN KEY (escolaridade_id) REFERENCES escolaridades(id),
+  CHECK (situacao IN ('Nao informado','Completo','Incompleto','Cursando','Trancado'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE importacoes (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nome_arquivo VARCHAR(255) NOT NULL,
+  sha256 CHAR(64) NOT NULL,
+  versao_importador VARCHAR(20) NOT NULL,
+  data_importacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  total_linhas INT UNSIGNED NOT NULL DEFAULT 0,
+  total_importados INT UNSIGNED NOT NULL DEFAULT 0,
+  total_atualizados INT UNSIGNED NOT NULL DEFAULT 0,
+  total_ignorados INT UNSIGNED NOT NULL DEFAULT 0,
+  total_inconsistencias INT UNSIGNED NOT NULL DEFAULT 0,
+  status VARCHAR(30) NOT NULL DEFAULT 'em_andamento',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_arquivo_versao (sha256, versao_importador),
+  CHECK (status IN ('em_andamento','concluida','falhou'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE importacao_origens (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  importacao_id BIGINT UNSIGNED NOT NULL,
+  colaborador_id BIGINT UNSIGNED NULL,
+  alocacao_id BIGINT UNSIGNED NULL,
+  arquivo VARCHAR(255) NOT NULL,
+  aba VARCHAR(255) NOT NULL,
+  linha INT UNSIGNED NOT NULL,
+  dados_originais JSON NOT NULL,
+  resultado VARCHAR(30) NOT NULL,
+  data_importacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_origem (importacao_id, aba, linha),
+  KEY ix_origem_pessoa (colaborador_id),
+  FOREIGN KEY (importacao_id) REFERENCES importacoes(id),
+  FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id),
+  FOREIGN KEY (alocacao_id) REFERENCES alocacoes_colaborador(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;
+
+CREATE TABLE importacao_inconsistencias (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  importacao_id BIGINT UNSIGNED NOT NULL,
+  origem_id BIGINT UNSIGNED NULL,
+  arquivo VARCHAR(255) NOT NULL,
+  aba VARCHAR(255) NOT NULL,
+  linha INT UNSIGNED NOT NULL,
+  campo VARCHAR(100) NOT NULL,
+  valor_original TEXT NULL,
+  tipo_inconsistencia VARCHAR(80) NOT NULL,
+  descricao TEXT NOT NULL,
+  resolvido BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY ix_pendencias (resolvido, tipo_inconsistencia),
+  FOREIGN KEY (importacao_id) REFERENCES importacoes(id),
+  FOREIGN KEY (origem_id) REFERENCES importacao_origens(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_ci;

@@ -1,0 +1,25 @@
+.gadsan-module { --gadsan-accent: #116b63; }
+.gadsan-module .gadsan-tabs { display:flex; flex-wrap:wrap; gap:.5rem; margin:1rem 0 1.8rem; border-bottom:1px solid #dce5e5; padding-bottom:.8rem; }
+.gadsan-tabs a { color:#38585b; padding:.6rem 1rem; border-radius:.6rem; text-decoration:none; font-weight:600; }
+.gadsan-tabs a:hover,.gadsan-tabs a[aria-current] { background:#e0f1ed; color:#07594e; }
+.gadsan-module .card { border:1px solid #dfe7e6; border-radius:14px; box-shadow:0 3px 12px #15302c06; overflow:hidden; }
+.gadsan-module .card-header { padding:1.1rem 1.3rem; background:#f6faf9; border-bottom:1px solid #e4ebe9; }
+.gadsan-module .card-body { padding:1.3rem; }
+.gadsan-module .card-footer { background:#f9fbfb; padding:1rem 1.3rem; }
+.gadsan-module .form-label { font-weight:600; color:#263d43; }
+.gadsan-module .form-control,.gadsan-module .form-select { min-height:44px; }
+.gadsan-module .btn-primary { background:#116b63; border-color:#116b63; }
+.gadsan-module .btn-primary:hover { background:#0b514b; }
+.gadsan-module .btn-outline-primary { color:#116b63; border-color:#116b63; }
+.gadsan-module .btn-outline-primary:hover { color:white; background:#116b63; }
+.gadsan-form-body { min-width:0; border:0; padding:0; }
+.gadsan-repeat { min-width:0; padding:1.1rem; border:1px solid #d8e5e2; border-radius:10px; margin-bottom:1.25rem; background:#fcfdfd; }
+.gadsan-repeat legend { float:none; width:auto; padding:0 .5rem; font-size:1rem; font-weight:700; color:#23665e; }
+.gadsan-checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:.8rem; }
+.gadsan-options-help,.gadsan-savebar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem; }
+.gadsan-savebar { padding:1.2rem; background:#fff; border:1px solid #dfe7e6; border-radius:14px; margin-bottom:1.5rem; }
+.gadsan-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; }
+.gadsan-original { display:grid; grid-template-columns:minmax(100px,1fr) minmax(0,2fr); gap:.6rem 1rem; overflow-wrap:anywhere; }
+.gadsan-module .table th { background:#f5f8f8; color:#526368; font-size:.85rem; padding:1rem; }
+.gadsan-module .table td { padding:1rem; overflow-wrap:anywhere; }
+@media(max-width:767px) { .gadsan-stats { grid-template-columns:repeat(2,1fr); } .gadsan-tabs a { padding:.6rem .7rem; font-size:.9rem; } .gadsan-savebar>div { width:100%; } .gadsan-savebar .btn { flex:1; } .gadsan-original { grid-template-columns:1fr; gap:.2rem; } .gadsan-original dd { margin-bottom:.8rem; } }

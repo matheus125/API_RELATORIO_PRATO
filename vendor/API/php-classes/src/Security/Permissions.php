@@ -8,6 +8,10 @@ class Permissions
     {
         return [
             'DASHBOARD_VIEW' => 'Visualizar dashboard',
+            'GADSAN_VIEW' => 'Visualizar colaboradores GADSAN',
+            'GADSAN_EDIT' => 'Cadastrar e editar colaboradores GADSAN',
+            'GADSAN_AUX' => 'Gerenciar cadastros auxiliares GADSAN',
+            'GADSAN_IMPORT' => 'Importar e revisar dados GADSAN',
             'FUNCIONARIOS_VIEW' => 'Visualizar funcionários',
             'FUNCIONARIOS_CREATE' => 'Cadastrar funcionários',
             'FUNCIONARIOS_UPDATE' => 'Editar funcionários',
