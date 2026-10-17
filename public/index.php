@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../config/paths.php';
 require_once ROOT_DIR . '/vendor/autoload.php';
+require_once APP_DIR . '/helpers/functions.php';
 
 // Harden the session before starting it. The application is served behind HTTPS
 // in production, while the local development server remains usable over HTTP.
@@ -42,7 +43,6 @@ $app = new Slim();
 $app->config('debug', $debugEnabled);
 $app->add(new PerfilMiddleware());
 
-require_once APP_DIR . '/helpers/functions.php';
 require_once APP_DIR . '/routes/admin.php';
 require_once APP_DIR . '/routes/admin-funcionarios.php';
 require_once APP_DIR . '/routes/admin-gadsan.php';
