@@ -1,72 +1,76 @@
--- ACL profissional com perfis existentes em tb_usuario.perfil
+-- ACL do Portal de Relatórios.
+-- Usa os mesmos nomes de colunas consumidos por Hcode\Model\Permissions.
+
 CREATE TABLE IF NOT EXISTS tb_permissions (
   id_permission INT NOT NULL AUTO_INCREMENT,
-  permission_key VARCHAR(80) NOT NULL,
-  description VARCHAR(150) NOT NULL,
+  permission_key VARCHAR(100) NOT NULL,
+  description VARCHAR(255) NOT NULL,
   module_name VARCHAR(80) DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id_permission),
   UNIQUE KEY uq_permission_key (permission_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS tb_profile_permissions (
   id_profile_permission INT NOT NULL AUTO_INCREMENT,
-  profile_key ENUM('ADMIN','SUPERVISOR','ASSESSOR') NOT NULL,
+  perfil ENUM('ADMIN','SUPERVISOR','ASSESSOR','CONSULTA') NOT NULL,
   id_permission INT NOT NULL,
-  allowed TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id_profile_permission),
-  UNIQUE KEY uq_profile_permission (profile_key, id_permission),
-  CONSTRAINT fk_profile_permission_permission FOREIGN KEY (id_permission) REFERENCES tb_permissions (id_permission) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  UNIQUE KEY uq_profile_permission (perfil, id_permission),
+  KEY idx_profile_permission_permission (id_permission),
+  CONSTRAINT fk_profile_permission_permission FOREIGN KEY (id_permission)
+    REFERENCES tb_permissions (id_permission) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO tb_permissions (permission_key, description, module_name) VALUES
 ('DASHBOARD_VIEW','Visualizar dashboard','DASHBOARD'),
+('ANALISE_INTELIGENTE_VIEW','Visualizar análises e indicadores','ANALISE_INTELIGENTE'),
+('PDF_HISTORICO_VIEW','Consultar e baixar relatórios PDF','PDF_HISTORICO'),
+('PLANILHA_VIEW','Visualizar painel e histórico de planilhas','PLANILHA'),
+('PLANILHA_EXPORT','Gerar e baixar planilhas','PLANILHA'),
+('UNIDADES_ATUALIZADAS_VIEW','Consultar atualizações das unidades','UNIDADES_ATUALIZADAS'),
+('CONSULTA_UNIFICADA_VIEW','Consultar cadastros e baixar CSV','CONSULTA_UNIFICADA'),
+('CONSULTA_UNIFICADA_SYNC','Sincronizar cadastros das unidades','CONSULTA_UNIFICADA'),
 ('FUNCIONARIOS_VIEW','Visualizar funcionários','FUNCIONARIOS'),
 ('FUNCIONARIOS_CREATE','Cadastrar funcionários','FUNCIONARIOS'),
 ('FUNCIONARIOS_UPDATE','Editar funcionários','FUNCIONARIOS'),
-('FUNCIONARIOS_DELETE','Excluir funcionários','FUNCIONARIOS'),
+('FUNCIONARIOS_DELETE','Excluir/inativar funcionários','FUNCIONARIOS'),
 ('FUNCIONARIOS_PASSWORD','Alterar senha de funcionários','FUNCIONARIOS'),
-('CLIENTES_VIEW','Visualizar clientes','CLIENTES'),
-('CLIENTES_CREATE','Cadastrar clientes','CLIENTES'),
-('CLIENTES_UPDATE','Editar clientes','CLIENTES'),
-('CLIENTES_DELETE','Excluir clientes','CLIENTES'),
-('DEPENDENTES_VIEW','Visualizar dependentes','DEPENDENTES'),
-('DEPENDENTES_CREATE','Cadastrar dependentes','DEPENDENTES'),
-('DEPENDENTES_UPDATE','Editar dependentes','DEPENDENTES'),
-('VENDAS_VIEW','Acessar vendas','VENDAS'),
-('RELATORIOS_VIEW','Visualizar relatórios','RELATORIOS'),
-('BACKUP_RUN','Executar backup manual','BACKUP'),
+('ACL_PROFILES_MANAGE','Gerenciar permissões por perfil','ACL_PROFILES'),
+('ACL_DENIED_VIEW','Visualizar acessos negados','ACL_DENIED'),
+('USUARIOS_SECURITY_MANAGE','Gerenciar status e bloqueio de usuários','USUARIOS_SECURITY'),
+('AUDITORIA_VIEW','Visualizar logs de auditoria','AUDITORIA'),
+('UPDATE_MONITORING_VIEW','Visualizar monitoramento de atualizações','UPDATE_MONITORING'),
+('UPDATE_MONITORING_MANAGE','Alterar configurações do monitoramento','UPDATE_MONITORING'),
+('UPDATE_PUBLISH_MANAGE','Publicar atualizações do sistema','UPDATE_PUBLISH'),
 ('NOTIFICACOES_VIEW','Visualizar notificações','NOTIFICACOES'),
-('NOTIFICACOES_CLEAR','Limpar notificações','NOTIFICACOES'),
-('SISTEMA_DEBUG','Acessar rotas de debug','SISTEMA')
+('NOTIFICACOES_UPDATE','Marcar notificações como lidas','NOTIFICACOES')
 ON DUPLICATE KEY UPDATE description = VALUES(description), module_name = VALUES(module_name);
 
-INSERT INTO tb_profile_permissions (profile_key, id_permission, allowed)
-SELECT 'ADMIN', id_permission, 1 FROM tb_permissions
-ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
-
-INSERT INTO tb_profile_permissions (profile_key, id_permission, allowed)
-SELECT 'SUPERVISOR', id_permission, 1 FROM tb_permissions WHERE permission_key IN (
-'DASHBOARD_VIEW','FUNCIONARIOS_VIEW','FUNCIONARIOS_CREATE','FUNCIONARIOS_UPDATE','FUNCIONARIOS_PASSWORD',
-'CLIENTES_VIEW','CLIENTES_CREATE','CLIENTES_UPDATE',
-'DEPENDENTES_VIEW','DEPENDENTES_CREATE','DEPENDENTES_UPDATE',
-'VENDAS_VIEW','RELATORIOS_VIEW','BACKUP_RUN','NOTIFICACOES_VIEW','NOTIFICACOES_CLEAR'
-)
-ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
-
-INSERT INTO tb_profile_permissions (profile_key, id_permission, allowed)
-SELECT 'ASSESSOR', id_permission, 1 FROM tb_permissions WHERE permission_key IN (
-'DASHBOARD_VIEW','CLIENTES_VIEW','DEPENDENTES_VIEW','VENDAS_VIEW','RELATORIOS_VIEW','NOTIFICACOES_VIEW'
-)
-ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
-
-
--- Permissão de exportação da planilha mensal
-INSERT IGNORE INTO tb_permissions (permission_key, description, module_name) VALUES ('PLANILHA_EXPORT','Gerar e baixar planilhas','RELATORIOS');
+-- O catálogo nasce com os padrões mínimos; alterações posteriores devem ser
+-- feitas na tela de permissões e não reexecutando concessões automaticamente.
+INSERT IGNORE INTO tb_profile_permissions (perfil, id_permission)
+SELECT 'ADMIN', id_permission FROM tb_permissions;
 
 INSERT IGNORE INTO tb_profile_permissions (perfil, id_permission)
-SELECT 'ADMIN', id_permission FROM tb_permissions WHERE permission_key = 'PLANILHA_EXPORT';
+SELECT 'SUPERVISOR', id_permission FROM tb_permissions
+WHERE permission_key IN (
+  'DASHBOARD_VIEW','ANALISE_INTELIGENTE_VIEW','PDF_HISTORICO_VIEW',
+  'PLANILHA_VIEW','PLANILHA_EXPORT','UNIDADES_ATUALIZADAS_VIEW',
+  'CONSULTA_UNIFICADA_VIEW','CONSULTA_UNIFICADA_SYNC','FUNCIONARIOS_VIEW',
+  'FUNCIONARIOS_CREATE','FUNCIONARIOS_UPDATE','FUNCIONARIOS_PASSWORD',
+  'ACL_DENIED_VIEW','AUDITORIA_VIEW','NOTIFICACOES_VIEW','NOTIFICACOES_UPDATE'
+);
 
 INSERT IGNORE INTO tb_profile_permissions (perfil, id_permission)
-SELECT 'SUPERVISOR', id_permission FROM tb_permissions WHERE permission_key = 'PLANILHA_EXPORT';
+SELECT 'ASSESSOR', id_permission FROM tb_permissions
+WHERE permission_key IN (
+  'DASHBOARD_VIEW','ANALISE_INTELIGENTE_VIEW','PDF_HISTORICO_VIEW',
+  'PLANILHA_VIEW','UNIDADES_ATUALIZADAS_VIEW','CONSULTA_UNIFICADA_VIEW',
+  'CONSULTA_UNIFICADA_SYNC','FUNCIONARIOS_VIEW'
+);
+
+INSERT IGNORE INTO tb_profile_permissions (perfil, id_permission)
+SELECT 'CONSULTA', id_permission FROM tb_permissions
+WHERE permission_key IN ('ANALISE_INTELIGENTE_VIEW','CONSULTA_UNIFICADA_VIEW');

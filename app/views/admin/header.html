@@ -7,6 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="title" content="Portal de Relatórios | Painel Administrativo" />
   <meta name="description" content="Portal institucional de relatórios do Governo do Estado do Amazonas." />
+  {if="isset($csrf_token)"}<meta name="csrf-token" content="{$csrf_token}" />{/if}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/source-sans-3@5.0.12/index.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/overlayscrollbars@2.10.1/styles/overlayscrollbars.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
@@ -351,6 +352,28 @@
       color: #fff;
       background: linear-gradient(135deg, #0d6efd, #0b57d0);
     }
+    .portal-notif-menu {
+      width: min(92vw, 420px);
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid #dbe5f0;
+    }
+    .portal-notif-list {
+      max-height: 380px;
+      overflow-y: auto;
+    }
+    .portal-notif-item {
+      white-space: normal;
+      border-bottom: 1px solid #eef2f7;
+    }
+    .portal-notif-item.is-read {
+      opacity: .62;
+      background: #f8fafc;
+    }
+    .portal-notif-read {
+      width: auto;
+      padding: .15rem .35rem;
+    }
 
   </style>
 </head>
@@ -373,6 +396,53 @@
         </div>
 
         <ul class="navbar-nav ms-auto align-items-center">
+          {if="canAccess('NOTIFICACOES_VIEW')"}
+          <li class="nav-item dropdown me-2">
+            <a class="nav-link position-relative" data-bs-toggle="dropdown" href="#" role="button" aria-label="Notificações">
+              <i class="bi bi-bell-fill fs-5"></i>
+              <span id="portalNotifBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill text-bg-danger" style="{if="$total <= 0"}display:none;{/if}">
+                {$total}
+              </span>
+            </a>
+            <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end shadow-sm portal-notif-menu">
+              <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom">
+                <div>
+                  <strong>Notificações</strong>
+                  <div class="small text-muted" id="portalNotifCounter">{$total} não lida(s)</div>
+                </div>
+                {if="canAccess('NOTIFICACOES_UPDATE')"}
+                <button type="button" class="btn btn-sm btn-outline-primary" id="portalNotifMarkAll" title="Marcar todas como lidas">
+                  <i class="bi bi-check2-all"></i>
+                </button>
+                {/if}
+              </div>
+              <div id="portalNotifList" class="portal-notif-list">
+                {if="$total == 0"}
+                <div class="dropdown-item text-center text-muted py-3">Nenhuma notificação pendente.</div>
+                {else}
+                {loop="$notificacoes"}
+                <div class="dropdown-item portal-notif-item {if="$value.lida == 1"}is-read{/if}" data-id="{$value.id}">
+                  <div class="d-flex gap-2 align-items-start">
+                    <i class="bi bi-info-circle text-primary mt-1"></i>
+                    <div class="flex-grow-1">
+                      <div class="fw-bold">{$value.titulo}</div>
+                      <div class="small text-muted">{$value.msg}</div>
+                      <div class="small text-muted">{$value.time}</div>
+                      {if="$value.link_destino != ''"}<a href="{$value.link_destino}" class="small">Abrir</a>{/if}
+                    </div>
+                    {if="canAccess('NOTIFICACOES_UPDATE')"}
+                    <button type="button" class="btn btn-sm btn-link portal-notif-read" title="Marcar como lida">
+                      <i class="bi bi-check2"></i>
+                    </button>
+                    {/if}
+                  </div>
+                </div>
+                {/loop}
+                {/if}
+              </div>
+            </div>
+          </li>
+          {/if}
           <li class="nav-item dropdown user-menu">
             <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
               <img src="/res/admin/dist/assets/img/avatar.png" class="user-image rounded-circle shadow-sm" alt="User Image" />
@@ -387,13 +457,103 @@
                 </p>
               </li>
               <li class="user-footer">
-                <a href="/admin/logout" class="btn btn-danger btn-flat float-end">Sair</a>
+                <form method="post" action="/admin/logout" class="d-inline"><input type="hidden" name="_csrf" value="{if="isset($csrf_token)"}{$csrf_token}{/if}"><button type="submit" class="btn btn-danger btn-flat float-end">Sair</button></form>
               </li>
             </ul>
           </li>
         </ul>
       </div>
     </nav>
+
+    <script>
+      (function () {
+        const csrf = document.querySelector('meta[name="csrf-token"]');
+        const token = csrf ? csrf.getAttribute('content') : '';
+        if (!token || typeof window.fetch !== 'function') return;
+        const nativeFetch = window.fetch.bind(window);
+        window.fetch = function (input, init) {
+          const options = init ? Object.assign({}, init) : {};
+          const method = String(options.method || (input && input.method) || 'GET').toUpperCase();
+          if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return nativeFetch(input, options);
+          let url;
+          try { url = new URL(typeof input === 'string' ? input : input.url, window.location.href); } catch (e) { return nativeFetch(input, options); }
+          if (url.origin === window.location.origin && url.pathname !== '/api/updates/status') {
+            const headers = new Headers(options.headers || (input && input.headers) || {});
+            if (!headers.has('X-CSRF-Token')) headers.set('X-CSRF-Token', token);
+            options.headers = headers;
+          }
+          return nativeFetch(input, options);
+        };
+      })();
+    </script>
+    <script>
+      (function () {
+        const badge = document.getElementById('portalNotifBadge');
+        const list = document.getElementById('portalNotifList');
+        const counter = document.getElementById('portalNotifCounter');
+        const markAll = document.getElementById('portalNotifMarkAll');
+        if (!badge || !list) return;
+
+        function esc(value) {
+          return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[ch];
+          });
+        }
+
+        function render(items, total) {
+          const unread = Number(total || 0);
+          badge.textContent = unread;
+          badge.style.display = unread > 0 ? '' : 'none';
+          if (counter) counter.textContent = unread + ' não lida(s)';
+          if (!items || !items.length) {
+            list.innerHTML = '<div class="dropdown-item text-center text-muted py-3">Nenhuma notificação.</div>';
+            return;
+          }
+          list.innerHTML = items.map(function (item) {
+            const link = item.link_destino ? '<a href="' + esc(item.link_destino) + '" class="small">Abrir</a>' : '';
+            const read = Number(item.lida || 0) === 1;
+            const btn = read ? '' : '<button type="button" class="btn btn-sm btn-link portal-notif-read" title="Marcar como lida"><i class="bi bi-check2"></i></button>';
+            return '<div class="dropdown-item portal-notif-item ' + (read ? 'is-read' : '') + '" data-id="' + esc(item.id || '') + '">' +
+              '<div class="d-flex gap-2 align-items-start"><i class="bi bi-info-circle text-primary mt-1"></i>' +
+              '<div class="flex-grow-1"><div class="fw-bold">' + esc(item.titulo || 'Notificação') + '</div>' +
+              '<div class="small text-muted">' + esc(item.mensagem || item.msg || '') + '</div>' +
+              '<div class="small text-muted">' + esc(item.time || item.created_at || '') + '</div>' + link + '</div>' + btn + '</div></div>';
+          }).join('');
+        }
+
+        async function refresh() {
+          try {
+            const response = await fetch('/admin/api/notificacoes', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+            const json = await response.json();
+            if (json && json.success !== false) render(json.items || [], json.total || 0);
+          } catch (e) {}
+        }
+
+        list.addEventListener('click', async function (event) {
+          const button = event.target.closest('.portal-notif-read');
+          if (!button) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const item = button.closest('.portal-notif-item');
+          const id = item ? item.getAttribute('data-id') : '';
+          if (!id) return;
+          await fetch('/admin/api/notificacoes/' + encodeURIComponent(id) + '/lida', { method: 'POST', credentials: 'same-origin' }).catch(function () {});
+          refresh();
+        });
+
+        if (markAll) {
+          markAll.addEventListener('click', async function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            await fetch('/admin/api/notificacoes/marcar-todas-lidas', { method: 'POST', credentials: 'same-origin' }).catch(function () {});
+            refresh();
+          });
+        }
+
+        refresh();
+        window.setInterval(refresh, 60000);
+      })();
+    </script>
 
     <aside class="app-sidebar bg-body-secondary" data-bs-theme="light">
       <div class="sidebar-brand">
@@ -425,13 +585,23 @@
             <li class="nav-item"><a href="/admin/funcionarios" class="nav-link"><i class="nav-icon bi bi-people"></i><p>Funcionários</p></a></li>
             {/if}
 
+            {if="canAnyAccess(['ANALISE_INTELIGENTE_VIEW','PDF_HISTORICO_VIEW','PLANILHA_VIEW','UNIDADES_ATUALIZADAS_VIEW','CONSULTA_UNIFICADA_VIEW'])"}
             <li class="nav-header">Relatórios</li>
-            {if="canAccess('DASHBOARD_VIEW')"}
+            {/if}
+            {if="canAccess('ANALISE_INTELIGENTE_VIEW')"}
             <li class="nav-item"><a href="/admin/analise-inteligente" class="nav-link"><i class="nav-icon bi bi-graph-up-arrow"></i><p>Análise Inteligente</p></a></li>
+            {/if}
+            {if="canAccess('PDF_HISTORICO_VIEW')"}
             <li class="nav-item"><a href="/admin/relatorio/pdf/historico" class="nav-link"><i class="nav-icon bi bi-file-earmark-pdf"></i><p>Histórico PDF</p></a></li>
+            {/if}
+            {if="canAccess('PLANILHA_VIEW')"}
             <li class="nav-item"><a href="/admin/relatorio/planilha" class="nav-link"><i class="nav-icon bi bi-file-earmark-excel"></i><p>Planilha mensal</p></a></li>
-            <li class="nav-item"><a href="/admin/consulta-unificada" class="nav-link"><i class="nav-icon bi bi-diagram-3"></i><p>Consulta unificada</p></a></li>
+            {/if}
+            {if="canAccess('UNIDADES_ATUALIZADAS_VIEW')"}
             <li class="nav-item"><a href="/admin/unidades-atualizadas" class="nav-link"><i class="nav-icon bi bi-building-check"></i><p>Unidades atualizadas</p></a></li>
+            {/if}
+            {if="canAccess('CONSULTA_UNIFICADA_VIEW')"}
+            <li class="nav-item"><a href="/admin/consulta-unificada" class="nav-link"><i class="nav-icon bi bi-diagram-3"></i><p>Consulta unificada</p></a></li>
             {/if}
 
             {if="canAnyAccess(['UPDATE_MONITORING_VIEW','UPDATE_PUBLISH_MANAGE'])"}

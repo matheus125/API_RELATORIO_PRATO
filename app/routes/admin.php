@@ -2,7 +2,9 @@
 
 use \Hcode\PageAdmin;
 use \Hcode\Model\Funcionarios;
+use \Hcode\Model\Notification;
 use \Hcode\DB\Sql;
+use Hcode\Audit\AuditLogger;
 use Hcode\Model\Permissions;
 
 function portalDashboardFilters(): array
@@ -42,20 +44,26 @@ function portalRequireAdmin(bool $json = false): void
 
 function portalIntelligentAnalysisService()
 {
+    require_once APP_DIR . '/services/AccessScopeService.php';
     require_once APP_DIR . '/services/IntelligentAnalysisService.php';
-    return new IntelligentAnalysisService(new Sql());
+    $sql = new Sql();
+    return new IntelligentAnalysisService($sql, new AccessScopeService($sql));
 }
 
 function portalUnidadesAtualizadasService()
 {
+    require_once APP_DIR . '/services/AccessScopeService.php';
     require_once APP_DIR . '/services/UnidadesAtualizadasService.php';
-    return new UnidadesAtualizadasService(new Sql());
+    $sql = new Sql();
+    return new UnidadesAtualizadasService($sql, new AccessScopeService($sql));
 }
 
 function portalUpdateMonitoringService()
 {
+    require_once APP_DIR . '/services/AccessScopeService.php';
     require_once APP_DIR . '/services/UpdateMonitoringService.php';
-    return new UpdateMonitoringService(new Sql());
+    $sql = new Sql();
+    return new UpdateMonitoringService($sql, new AccessScopeService($sql));
 }
 
 function portalUpdatePublishService()
@@ -63,6 +71,40 @@ function portalUpdatePublishService()
     require_once APP_DIR . '/services/CentralUpdatePublishService.php';
     $config = require APP_DIR . '/config/update-publish.php';
     return new CentralUpdatePublishService($config);
+}
+
+function portalSourceSyncService()
+{
+    require_once APP_DIR . '/services/SourceSyncService.php';
+    $config = require APP_DIR . '/config/update-publish.php';
+    return new SourceSyncService($config);
+}
+
+function portalSourceUploadAuthorized(): bool
+{
+    $config = require APP_DIR . '/config/update-publish.php';
+    $expected = trim((string)($config['source_upload_token'] ?? ''));
+    if ($expected === '') {
+        return false;
+    }
+
+    $authorization = (string)($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
+    $received = '';
+    if (preg_match('/Bearer\s+(.+)/i', $authorization, $match)) {
+        $received = trim($match[1]);
+    } elseif (isset($_SERVER['HTTP_X_SOURCE_SYNC_TOKEN'])) {
+        $received = trim((string)$_SERVER['HTTP_X_SOURCE_SYNC_TOKEN']);
+    }
+
+    return $received !== '' && hash_equals($expected, $received);
+}
+
+function portalRequireSourceSyncAccess(): void
+{
+    if (portalSourceUploadAuthorized()) {
+        return;
+    }
+    Funcionarios::checkPermission('UPDATE_PUBLISH_MANAGE');
 }
 
 function portalUpdateMonitoringFallback(string $message = ''): array
@@ -96,7 +138,7 @@ function portalLogOperationalError(string $message): void
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
     }
-    @file_put_contents($dir . DIRECTORY_SEPARATOR . 'operational-monitoring.log', '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL, FILE_APPEND);
+    @file_put_contents($dir . DIRECTORY_SEPARATOR . 'operational-monitoring.log', '[' . portal_log_timestamp() . '] ' . $message . PHP_EOL, FILE_APPEND);
 }
 
 function portalReadJsonPayload(): array
@@ -109,6 +151,19 @@ function portalReadJsonPayload(): array
     return $_POST ?: [];
 }
 
+function portalConsultaOrigemBancosFromRequest(): array
+{
+    $value = $_GET['origem_bancos'] ?? [];
+    if (!is_array($value)) {
+        $value = explode(',', (string)$value);
+    }
+
+    return array_values(array_filter(array_map(function ($item) {
+        $item = trim((string)$item);
+        return $item !== '' ? $item : null;
+    }, $value)));
+}
+
 function portalValidateUpdateMonitorToken(array $server): void
 {
     $expected = '';
@@ -117,7 +172,11 @@ function portalValidateUpdateMonitorToken(array $server): void
     }
 
     if ($expected === '') {
-        return;
+        http_response_code(503);
+        portalDashboardJson([
+            'success' => false,
+            'message' => 'Monitoramento de atualizações não está configurado.',
+        ]);
     }
 
     $authorization = (string)($server['HTTP_AUTHORIZATION'] ?? $server['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
@@ -144,7 +203,7 @@ function portalPdfLog(string $message): void
         @mkdir($dir, 0775, true);
     }
 
-    @file_put_contents($dir . DIRECTORY_SEPARATOR . 'pdf-download-lote.log', '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL, FILE_APPEND);
+    @file_put_contents($dir . DIRECTORY_SEPARATOR . 'pdf-download-lote.log', '[' . portal_log_timestamp() . '] ' . $message . PHP_EOL, FILE_APPEND);
 }
 
 function portalPdfColumns(Sql $sql): array
@@ -176,6 +235,7 @@ function portalPdfBuildHistoricoFilter(Sql $sql, array $input): array
 
     $data = isset($input['data']) ? trim((string)$input['data']) : '';
     $status = isset($input['status']) ? trim((string)$input['status']) : '';
+    $regiao = isset($input['regiao']) ? trim((string)$input['regiao']) : '';
     $busca = isset($input['busca']) ? trim((string)$input['busca']) : (isset($input['q']) ? trim((string)$input['q']) : '');
 
     if ($data !== '') {
@@ -229,6 +289,11 @@ function portalPdfBuildHistoricoFilter(Sql $sql, array $input): array
         }
     }
 
+    require_once APP_DIR . '/services/AccessScopeService.php';
+    $scope = new AccessScopeService($sql);
+    [$where, $params] = $scope->appendConstraint($where, $params, $scope->dataConstraint('tb_relatorios_pdf', 'tb_relatorios_pdf', 'pdf_historico'));
+    [$where, $params] = $scope->appendConstraint($where, $params, $scope->regionConstraint('tb_relatorios_pdf', 'tb_relatorios_pdf', 'pdf_historico_regiao', $regiao));
+
     return [
         'where' => $where,
         'whereSql' => count($where) ? 'WHERE ' . implode(' AND ', $where) : '',
@@ -254,13 +319,24 @@ function portalPdfSelectColumns(Sql $sql): array
         'nome_unidade',
         'unidade',
         'unidade_nome',
-        'nome_banco'
+        'nome_banco',
+        'id_base_consulta'
     ];
 
     $select = [];
     foreach ($wanted as $column) {
         if (in_array($column, $columns, true)) {
             $select[] = '`' . str_replace('`', '``', $column) . '`';
+        }
+    }
+
+    if (in_array('id_base_consulta', $columns, true)) {
+        require_once APP_DIR . '/services/AccessScopeService.php';
+        $scope = new AccessScopeService($sql);
+        if ($scope->tableExists('tb_bases_consulta') && $scope->tableExists('tb_regioes')) {
+            $select[] = "(SELECT rg.codigo FROM tb_bases_consulta bc JOIN tb_regioes rg ON rg.id_regiao = bc.id_regiao WHERE bc.id = tb_relatorios_pdf.id_base_consulta LIMIT 1) AS regiao";
+            $select[] = "(SELECT rg.nome FROM tb_bases_consulta bc JOIN tb_regioes rg ON rg.id_regiao = bc.id_regiao WHERE bc.id = tb_relatorios_pdf.id_base_consulta LIMIT 1) AS regiao_nome";
+            $select[] = "(SELECT bc.municipio FROM tb_bases_consulta bc WHERE bc.id = tb_relatorios_pdf.id_base_consulta LIMIT 1) AS municipio";
         }
     }
 
@@ -467,10 +543,17 @@ $app->get('/admin', function () {
         $rows = $sql->select("SELECT COUNT(*) AS total FROM tb_usuario WHERE ativo = 1");
         $stats['usuarios_ativos'] = (int)($rows[0]['total'] ?? 0);
 
-        $rows = $sql->select("SELECT COUNT(*) AS total FROM tb_userlogs WHERE DATE(created_at) = CURDATE()");
+        [$todayStartUtc, $todayEndUtc] = portal_manaus_day_utc_bounds();
+        $rows = $sql->select("SELECT COUNT(*) AS total FROM tb_userlogs WHERE created_at BETWEEN :inicio AND :fim", [
+            ':inicio' => $todayStartUtc,
+            ':fim' => $todayEndUtc,
+        ]);
         $stats['logs_hoje'] = (int)($rows[0]['total'] ?? 0);
 
-        $rows = $sql->select("SELECT COUNT(*) AS total FROM tb_access_denied WHERE DATE(created_at) = CURDATE()");
+        $rows = $sql->select("SELECT COUNT(*) AS total FROM tb_access_denied WHERE created_at BETWEEN :inicio AND :fim", [
+            ':inicio' => $todayStartUtc,
+            ':fim' => $todayEndUtc,
+        ]);
         $stats['acessos_negados_hoje'] = (int)($rows[0]['total'] ?? 0);
 
         $rows = $sql->select("
@@ -480,7 +563,7 @@ $app->get('/admin', function () {
             ORDER BY created_at DESC
             LIMIT 1
         ");
-        $stats['ultimo_login'] = $rows[0]['created_at'] ?? null;
+        $stats['ultimo_login'] = !empty($rows[0]['created_at']) ? portal_format_manaus($rows[0]['created_at']) : null;
 
         $stats['unidades_atualizadas'] = portalUnidadesAtualizadasService()->getDashboardResumo()['atualizadas'] ?? 0;
     } catch (Throwable $e) {
@@ -499,6 +582,10 @@ $app->get('/admin', function () {
             ORDER BY created_at DESC
             LIMIT 8
         ");
+        foreach ($recentLogs as &$log) {
+            $log['created_at'] = portal_format_manaus($log['created_at'] ?? null);
+        }
+        unset($log);
     } catch (Throwable $e) {
         $recentLogs = [];
         if ($dashboardDbError === '') {
@@ -524,14 +611,14 @@ $app->get('/admin', function () {
 });
 
 $app->get('/admin/analise-inteligente', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('ANALISE_INTELIGENTE_VIEW');
 
     $page = new PageAdmin();
     $page->setTpl('analise-inteligente');
 });
 
 $app->get('/admin/unidades-atualizadas', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('UNIDADES_ATUALIZADAS_VIEW');
 
     $filtros = [
         'unidade' => $_GET['unidade'] ?? '',
@@ -592,7 +679,60 @@ $app->get('/admin/publicar-atualizacao', function () {
     $page = new PageAdmin();
     $page->setTpl('publicar-atualizacao', [
         'currentVersion' => $service->currentVersion(),
+        'suggestedVersion' => $service->suggestNextVersion(),
     ]);
+});
+
+$app->get('/admin/api/notificacoes', function () {
+    try {
+        Funcionarios::checkPermission('NOTIFICACOES_VIEW');
+        portalDashboardJson([
+            'success' => true,
+            'total' => Notification::getTotal(),
+            'items' => Notification::getAll(15),
+        ]);
+    } catch (Throwable $e) {
+        portalLogOperationalError('Falha ao listar notificacoes: ' . $e->getMessage());
+        http_response_code(500);
+        portalDashboardJson([
+            'success' => false,
+            'message' => 'Não foi possível carregar as notificações.',
+        ]);
+    }
+});
+
+$app->post('/admin/api/notificacoes/:id/lida', function ($id) {
+    try {
+        Funcionarios::checkPermission('NOTIFICACOES_UPDATE');
+        portalDashboardJson([
+            'success' => Notification::markRead((int)$id),
+            'total' => Notification::getTotal(),
+        ]);
+    } catch (Throwable $e) {
+        portalLogOperationalError('Falha ao marcar notificacao como lida: ' . $e->getMessage());
+        http_response_code(500);
+        portalDashboardJson([
+            'success' => false,
+            'message' => 'Não foi possível atualizar a notificação.',
+        ]);
+    }
+});
+
+$app->post('/admin/api/notificacoes/marcar-todas-lidas', function () {
+    try {
+        Funcionarios::checkPermission('NOTIFICACOES_UPDATE');
+        portalDashboardJson([
+            'success' => Notification::markAllRead(),
+            'total' => Notification::getTotal(),
+        ]);
+    } catch (Throwable $e) {
+        portalLogOperationalError('Falha ao marcar todas notificacoes como lidas: ' . $e->getMessage());
+        http_response_code(500);
+        portalDashboardJson([
+            'success' => false,
+            'message' => 'Não foi possível atualizar as notificações.',
+        ]);
+    }
 });
 
 $app->get('/admin/api/update-publish/preview', function () {
@@ -603,8 +743,152 @@ $app->get('/admin/api/update-publish/preview', function () {
             'data' => portalUpdatePublishService()->preview(),
         ]);
     } catch (Throwable $e) {
+        portalLogOperationalError('Falha no preview de publicacao de atualizacao: ' . $e->getMessage() . ' | trace=' . $e->getTraceAsString());
         http_response_code(500);
         portalDashboardJson(['success' => false, 'message' => $e->getMessage()]);
+    }
+});
+
+$app->get('/admin/api/source-sync/status', function () {
+    try {
+        Funcionarios::checkPermission('UPDATE_PUBLISH_MANAGE');
+        portalDashboardJson(portalSourceSyncService()->status());
+    } catch (Throwable $e) {
+        portalLogOperationalError('Falha status sincronizacao fonte: ' . $e->getMessage() . ' | trace=' . $e->getTraceAsString());
+        http_response_code(500);
+        portalDashboardJson(['success' => false, 'message' => $e->getMessage()]);
+    }
+});
+
+$app->post('/admin/api/source-sync/snapshot', function () {
+    try {
+        Funcionarios::checkPermission('UPDATE_PUBLISH_MANAGE');
+        $payload = portalReadJsonPayload();
+        $result = portalSourceSyncService()->snapshot((string)($payload['notes'] ?? ''));
+        AuditLogger::log([
+            'categoria' => AuditLogger::CREATE,
+            'acao' => 'SOURCE_SYNC_SNAPSHOT',
+            'modulo' => 'ATUALIZACOES',
+            'menu' => 'Atualizações',
+            'sub_menu' => 'Fonte',
+            'entidade' => 'source_sync',
+            'registro_id' => $result['sync']['sync_id'] ?? null,
+            'descricao' => 'Usuário registrou snapshot da fonte.',
+            'dados_novos' => $result,
+        ]);
+        portalDashboardJson($result);
+    } catch (Throwable $e) {
+        AuditLogger::logError($e, [
+            'acao' => 'SOURCE_SYNC_SNAPSHOT_FAILED',
+            'modulo' => 'ATUALIZACOES',
+            'descricao' => 'Falha ao registrar snapshot da fonte.',
+        ]);
+        portalLogOperationalError('Falha ao registrar sincronizacao fonte: ' . $e->getMessage() . ' | trace=' . $e->getTraceAsString());
+        http_response_code(500);
+        portalDashboardJson(['success' => false, 'message' => $e->getMessage()]);
+    }
+});
+
+$app->get('/admin/api/source-sync/history', function () {
+    try {
+        Funcionarios::checkPermission('UPDATE_PUBLISH_MANAGE');
+        $limit = max(1, min(100, (int)($_GET['limit'] ?? 20)));
+        portalDashboardJson([
+            'success' => true,
+            'history' => portalSourceSyncService()->history($limit),
+        ]);
+    } catch (Throwable $e) {
+        portalLogOperationalError('Falha historico sincronizacao fonte: ' . $e->getMessage() . ' | trace=' . $e->getTraceAsString());
+        http_response_code(500);
+        portalDashboardJson(['success' => false, 'message' => $e->getMessage()]);
+    }
+});
+
+$app->get('/admin/api/source-sync/diff', function () {
+    try {
+        Funcionarios::checkPermission('UPDATE_PUBLISH_MANAGE');
+        portalDashboardJson(portalSourceSyncService()->diff((string)($_GET['from'] ?? ''), (string)($_GET['to'] ?? 'current')));
+    } catch (Throwable $e) {
+        portalLogOperationalError('Falha diff sincronizacao fonte: ' . $e->getMessage() . ' | trace=' . $e->getTraceAsString());
+        http_response_code(500);
+        portalDashboardJson(['success' => false, 'message' => $e->getMessage()]);
+    }
+});
+
+$app->get('/admin/api/source-sync/rollback-preview', function () {
+    try {
+        Funcionarios::checkPermission('UPDATE_PUBLISH_MANAGE');
+        portalDashboardJson(portalSourceSyncService()->rollbackPreview((string)($_GET['sync_id'] ?? '')));
+    } catch (Throwable $e) {
+        portalLogOperationalError('Falha preview rollback fonte: ' . $e->getMessage() . ' | trace=' . $e->getTraceAsString());
+        http_response_code(500);
+        portalDashboardJson(['success' => false, 'message' => $e->getMessage()]);
+    }
+});
+
+$app->post('/admin/api/source-sync/rollback', function () {
+    try {
+        Funcionarios::checkPermission('UPDATE_PUBLISH_MANAGE');
+        $payload = portalReadJsonPayload();
+        portalDashboardJson(portalSourceSyncService()->rollback((string)($payload['sync_id'] ?? '')));
+    } catch (Throwable $e) {
+        portalLogOperationalError('Falha rollback sincronizacao fonte: ' . $e->getMessage() . ' | trace=' . $e->getTraceAsString());
+        http_response_code(500);
+        portalDashboardJson(['success' => false, 'message' => $e->getMessage()]);
+    }
+});
+
+$app->post('/admin/api/source-sync/upload', function () {
+    try {
+        portalRequireSourceSyncAccess();
+        if (empty($_FILES['source_zip']) || !is_uploaded_file($_FILES['source_zip']['tmp_name'])) {
+            throw new Exception('Envie o arquivo ZIP no campo source_zip.');
+        }
+        $result = portalSourceSyncService()->receiveUploadedZip(
+            (string)$_FILES['source_zip']['tmp_name'],
+            (string)($_POST['notes'] ?? 'Fonte recebida por upload autenticado')
+        );
+        AuditLogger::log([
+            'categoria' => AuditLogger::UPLOAD,
+            'acao' => 'SOURCE_SYNC_UPLOAD',
+            'modulo' => 'ATUALIZACOES',
+            'menu' => 'Atualizações',
+            'sub_menu' => 'Fonte',
+            'entidade' => 'source_sync',
+            'registro_id' => $result['sync']['sync_id'] ?? null,
+            'descricao' => 'Usuário realizou upload autenticado da fonte.',
+            'dados_novos' => [
+                'arquivo' => $_FILES['source_zip']['name'] ?? 'source_zip',
+                'tamanho' => $_FILES['source_zip']['size'] ?? null,
+                'resultado' => $result,
+            ],
+        ]);
+        portalDashboardJson($result);
+    } catch (Throwable $e) {
+        AuditLogger::logError($e, [
+            'acao' => 'SOURCE_SYNC_UPLOAD_FAILED',
+            'modulo' => 'ATUALIZACOES',
+            'descricao' => 'Falha no upload autenticado da fonte.',
+        ]);
+        portalLogOperationalError('Falha upload fonte autenticado: ' . $e->getMessage() . ' | trace=' . $e->getTraceAsString());
+        http_response_code(500);
+        portalDashboardJson(['success' => false, 'message' => $e->getMessage()]);
+    }
+});
+
+$app->get('/admin/api/update-publish/suggest-version', function () {
+    try {
+        Funcionarios::checkPermission('UPDATE_PUBLISH_MANAGE');
+        $service = portalUpdatePublishService();
+        portalDashboardJson([
+            'success' => true,
+            'current_version' => $service->currentVersion(),
+            'suggested_version' => $service->suggestNextVersion(),
+        ]);
+    } catch (Throwable $e) {
+        portalLogOperationalError('Falha ao sugerir versao de atualizacao: ' . $e->getMessage());
+        http_response_code(500);
+        portalDashboardJson(['success' => false, 'message' => 'Não foi possível sugerir a próxima versão.']);
     }
 });
 
@@ -613,6 +897,7 @@ $app->post('/admin/api/update-publish/test-connection', function () {
         Funcionarios::checkPermission('UPDATE_PUBLISH_MANAGE');
         portalDashboardJson(portalUpdatePublishService()->testConnection());
     } catch (Throwable $e) {
+        portalLogOperationalError('Falha no teste de conexao da publicacao de atualizacao: ' . $e->getMessage() . ' | trace=' . $e->getTraceAsString());
         http_response_code(500);
         portalDashboardJson(['success' => false, 'message' => $e->getMessage()]);
     }
@@ -621,8 +906,26 @@ $app->post('/admin/api/update-publish/test-connection', function () {
 $app->post('/admin/api/update-publish/publish', function () {
     try {
         Funcionarios::checkPermission('UPDATE_PUBLISH_MANAGE');
-        portalDashboardJson(portalUpdatePublishService()->publish($_POST['version'] ?? '', $_POST['changelog'] ?? ''));
+        $result = portalUpdatePublishService()->publish($_POST['version'] ?? '', $_POST['changelog'] ?? '');
+        AuditLogger::log([
+            'categoria' => AuditLogger::CREATE,
+            'acao' => 'UPDATE_PACKAGE_PUBLISH',
+            'modulo' => 'ATUALIZACOES',
+            'menu' => 'Atualizações',
+            'sub_menu' => 'Publicação',
+            'entidade' => 'pacote_atualizacao',
+            'registro_id' => $result['version'] ?? ($_POST['version'] ?? ''),
+            'descricao' => 'Usuário publicou pacote de atualização.',
+            'dados_novos' => AuditLogger::sanitize($result),
+        ]);
+        portalDashboardJson($result);
     } catch (Throwable $e) {
+        AuditLogger::logError($e, [
+            'acao' => 'UPDATE_PACKAGE_PUBLISH_FAILED',
+            'modulo' => 'ATUALIZACOES',
+            'descricao' => 'Falha ao publicar pacote de atualização.',
+        ]);
+        portalLogOperationalError('Falha ao publicar atualizacao: ' . $e->getMessage() . ' | trace=' . $e->getTraceAsString());
         http_response_code(500);
         portalDashboardJson(['success' => false, 'message' => $e->getMessage()]);
     }
@@ -654,7 +957,7 @@ $app->get('/admin/api/updates/monitoring', function () {
 
 $app->get('/admin/api/updates/unit/:unidade_id', function ($unidadeId) {
     try {
-        Funcionarios::checkPermission('DASHBOARD_VIEW');
+        Funcionarios::checkPermission('UPDATE_MONITORING_VIEW');
         portalDashboardJson([
             'success' => true,
             'data' => portalUpdateMonitoringService()->unitDetail($unidadeId, $_GET['sistema'] ?? ''),
@@ -668,7 +971,7 @@ $app->get('/admin/api/updates/unit/:unidade_id', function ($unidadeId) {
 
 $app->get('/admin/api/updates/version/:versao', function ($versao) {
     try {
-        Funcionarios::checkPermission('DASHBOARD_VIEW');
+        Funcionarios::checkPermission('UPDATE_MONITORING_VIEW');
         portalDashboardJson([
             'success' => true,
             'data' => portalUpdateMonitoringService()->versionDetail($versao),
@@ -682,7 +985,8 @@ $app->get('/admin/api/updates/version/:versao', function ($versao) {
 
 $app->post('/admin/api/updates/config', function () {
     try {
-        Funcionarios::checkPermission('DASHBOARD_VIEW');
+        Funcionarios::checkPermission('UPDATE_MONITORING_VIEW');
+        Funcionarios::checkPermission('UPDATE_MONITORING_MANAGE');
         portalUpdateMonitoringService()->updateConfig($_POST['offline_threshold_minutes'] ?? 60);
         portalDashboardJson(['success' => true, 'message' => 'Configuracao atualizada.']);
     } catch (Throwable $e) {
@@ -693,42 +997,42 @@ $app->post('/admin/api/updates/config', function () {
 });
 
 $app->get('/admin/api/dashboard/resumo', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('ANALISE_INTELIGENTE_VIEW');
     portalDashboardJson(portalIntelligentAnalysisService()->getResumo(portalDashboardFilters()));
 });
 
 $app->get('/admin/api/dashboard/comparativo-semanal', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('ANALISE_INTELIGENTE_VIEW');
     portalDashboardJson(portalIntelligentAnalysisService()->getComparativo('semanal', portalDashboardFilters()));
 });
 
 $app->get('/admin/api/dashboard/comparativo-mensal', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('ANALISE_INTELIGENTE_VIEW');
     portalDashboardJson(portalIntelligentAnalysisService()->getComparativo('mensal', portalDashboardFilters()));
 });
 
 $app->get('/admin/api/dashboard/comparativo-anual', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('ANALISE_INTELIGENTE_VIEW');
     portalDashboardJson(portalIntelligentAnalysisService()->getComparativo('anual', portalDashboardFilters()));
 });
 
 $app->get('/admin/api/dashboard/ranking-unidades', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('ANALISE_INTELIGENTE_VIEW');
     portalDashboardJson(portalIntelligentAnalysisService()->getRankingUnidades(portalDashboardFilters()));
 });
 
 $app->get('/admin/api/dashboard/alertas', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('ANALISE_INTELIGENTE_VIEW');
     portalDashboardJson(portalIntelligentAnalysisService()->getAlertas(portalDashboardFilters()));
 });
 
 $app->get('/admin/api/dashboard/analise-inteligente', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('ANALISE_INTELIGENTE_VIEW');
     portalDashboardJson(portalIntelligentAnalysisService()->getAnaliseInteligente(portalDashboardFilters()));
 });
 
 $app->get('/admin/api/dashboard/unidades', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('ANALISE_INTELIGENTE_VIEW');
     portalDashboardJson(portalIntelligentAnalysisService()->getUnidades());
 });
 
@@ -740,11 +1044,24 @@ $app->get('/admin/login', function () {
 
     $page->setTpl('login', [
         'error' => Funcionarios::getError(),
-        'attempts' => Funcionarios::getLoginAttempts()
+        'attempts' => Funcionarios::getLoginAttempts(),
+        'csrf_token' => portal_csrf_token(),
     ]);
 });
 
 $app->post('/admin/login', function () {
+    portal_require_csrf($_POST);
+    $cpf = isset($_POST['cpf']) ? preg_replace('/\D+/', '', (string)$_POST['cpf']) : '';
+
+    AuditLogger::log([
+        'categoria' => AuditLogger::AUTH_LOGIN,
+        'acao' => 'AUTH_LOGIN_ATTEMPT',
+        'modulo' => 'AUTH',
+        'descricao' => 'Tentativa de login.',
+        'status' => 'ATTEMPT',
+        'actor' => ['cpf' => $cpf],
+    ]);
+
     try {
         if (!isset($_POST['cpf']) || trim($_POST['cpf']) === '') {
             throw new Exception('Informe o CPF.');
@@ -758,17 +1075,28 @@ $app->post('/admin/login', function () {
             throw new Exception('Muitas tentativas inválidas. Aguarde um momento antes de tentar novamente.');
         }
 
-        $cpf = preg_replace('/\D+/', '', $_POST['cpf']);
         $funcionario = Funcionarios::login($cpf, $_POST['senha']);
         $_SESSION[Funcionarios::SESSION] = $funcionario->getValues();
 
         Funcionarios::clearError();
         Funcionarios::clearLoginAttempts();
-        Funcionarios::registerAccess($funcionario, 'LOGIN');
+        Permissions::syncDefinitions();
+        $permissions = Funcionarios::refreshPermissions();
 
-        header('Location: /admin');
+        header('Location: ' . Permissions::firstAllowedPath($permissions));
         exit;
     } catch (Exception $e) {
+        AuditLogger::log([
+            'categoria' => AuditLogger::AUTH_LOGIN_FAILED,
+            'acao' => AuditLogger::AUTH_LOGIN_FAILED,
+            'modulo' => 'AUTH',
+            'descricao' => 'Login recusado.',
+            'status' => 'FAILED',
+            'severidade' => AuditLogger::WARNING,
+            'actor' => ['cpf' => $cpf],
+            'erro' => ['motivo' => $e->getMessage()],
+        ]);
+
         Funcionarios::addLoginAttempt();
         $tentativas = Funcionarios::getLoginAttempts();
         $msg = $e->getMessage();
@@ -783,13 +1111,8 @@ $app->post('/admin/login', function () {
     }
 });
 
-$app->get('/admin/logout', function () {
-    $funcionario = Funcionarios::getFromSession();
-
-    if ($funcionario && $funcionario->getid_usuario() > 0) {
-        Funcionarios::registerAccess($funcionario, 'LOGOUT');
-    }
-
+$app->post('/admin/logout', function () {
+    portal_require_csrf($_POST);
     Funcionarios::logout();
     header('Location: /admin/login');
     exit;
@@ -798,11 +1121,6 @@ $app->get('/admin/logout', function () {
 $app->get('/acesso-negado', function () {
     Funcionarios::verifyLogin();
 
-    $func = Funcionarios::getFromSession();
-    if ($func && $func->getid_usuario() > 0) {
-        Funcionarios::registerAccess($func, 'ACESSO_NEGADO');
-    }
-
     $page = new PageAdmin();
     $page->setTpl('acesso-negado');
 });
@@ -810,35 +1128,63 @@ $app->get('/acesso-negado', function () {
 $app->get('/admin/seguranca/permissoes', function () {
     Funcionarios::checkPermission('ACL_PROFILES_MANAGE');
 
-    $page = new PageAdmin();
-    $all = Permissions::listAll();
+    if (empty($_SESSION['acl_csrf'])) $_SESSION['acl_csrf'] = bin2hex(random_bytes(32));
+    $profileLabels = Permissions::profiles();
+    $selectedProfile = $_GET['perfil'] ?? 'ADMIN';
+    if (!is_string($selectedProfile) || !isset($profileLabels[$selectedProfile])) $selectedProfile = 'ADMIN';
+    $profiles = [];
+    foreach ($profileLabels as $key => $label) {
+        $profiles[] = ['key' => $key, 'label' => $label, 'permissions' => Permissions::listByProfile($key)];
+    }
+    $success = $_SESSION['acl_success'] ?? '';
+    $error = $_SESSION['acl_error'] ?? '';
+    unset($_SESSION['acl_success'], $_SESSION['acl_error']);
 
+    $page = new PageAdmin();
     $page->setTpl('seguranca-permissoes', [
-        'permissions' => $all,
-        'admin_permissions' => Permissions::listByProfile('ADMIN'),
-        'supervisor_permissions' => Permissions::listByProfile('SUPERVISOR'),
-        'assessor_permissions' => Permissions::listByProfile('ASSESSOR')
+        'permission_modules' => Permissions::groupedForManagement(),
+        'profiles' => $profiles,
+        'selected_profile' => $selectedProfile,
+        'csrf_token' => $_SESSION['acl_csrf'],
+        'success_message' => $success,
+        'error_message' => $error,
     ]);
 });
 
 $app->post('/admin/seguranca/permissoes', function () {
     Funcionarios::checkPermission('ACL_PROFILES_MANAGE');
+    $selectedProfile = $_POST['selected_profile'] ?? 'ADMIN';
+    if (!is_string($selectedProfile) || !isset(Permissions::profiles()[$selectedProfile])) $selectedProfile = 'ADMIN';
 
-    foreach (['ADMIN', 'SUPERVISOR', 'ASSESSOR'] as $perfil) {
-        Permissions::saveProfilePermissions($perfil, $_POST['permissions'][$perfil] ?? []);
+    try {
+        if (!is_string($_POST['_csrf'] ?? null) || empty($_SESSION['acl_csrf']) ||
+            !hash_equals($_SESSION['acl_csrf'], $_POST['_csrf'])) {
+            throw new InvalidArgumentException('A sessão do formulário expirou. Atualize a página e tente novamente.');
+        }
+        $receivedProfiles = $_POST['matrix_profiles'] ?? [];
+        if (($_POST['matrix_complete'] ?? '') !== '1' || !is_array($receivedProfiles) ||
+            $receivedProfiles !== array_keys(Permissions::profiles())) {
+            throw new InvalidArgumentException('O formulário não foi recebido por completo. Atualize a página e tente novamente.');
+        }
+        $matrix = $_POST['permissions'] ?? [];
+        if (!is_array($matrix)) {
+            throw new InvalidArgumentException('Seleção de permissões inválida. Atualize a página e tente novamente.');
+        }
+        Permissions::saveMatrix($matrix);
+        Funcionarios::refreshPermissions();
+        Funcionarios::audit('ACL_PERMISSION_UPDATE', 'SEGURANCA', null, 'Permissões por perfil foram atualizadas');
+        $_SESSION['acl_success'] = 'Permissões salvas com sucesso.';
+    } catch (InvalidArgumentException $error) {
+        $_SESSION['acl_error'] = $error->getMessage();
+    } catch (Throwable $error) {
+        $_SESSION['acl_error'] = 'Não foi possível salvar as permissões. Nenhuma alteração foi aplicada; tente novamente.';
+        AuditLogger::logError($error, ['modulo' => 'SEGURANCA', 'acao' => 'ACL_PERMISSION_UPDATE']);
     }
 
-    Permissions::clearSessionCache();
-    Funcionarios::refreshPermissions();
-
-    Funcionarios::audit(
-        'ACL_PERMISSION_UPDATE',
-        'SEGURANCA',
-        null,
-        'Permissões por perfil foram atualizadas'
-    );
-
-    header('Location: /admin/seguranca/permissoes');
+    $redirect = Funcionarios::hasPermission('ACL_PROFILES_MANAGE')
+        ? '/admin/seguranca/permissoes?perfil=' . rawurlencode($selectedProfile)
+        : Permissions::firstAllowedPath(Funcionarios::getPermissions());
+    header('Location: ' . $redirect);
     exit;
 });
 
@@ -847,6 +1193,10 @@ $app->get('/admin/seguranca/acessos-negados', function () {
 
     $sql = new Sql();
     $rows = $sql->select("SELECT * FROM tb_access_denied ORDER BY created_at DESC LIMIT 300");
+    foreach ($rows as &$row) {
+        $row['created_at'] = portal_format_manaus($row['created_at'] ?? null);
+    }
+    unset($row);
 
     $page = new PageAdmin();
     $page->setTpl('seguranca-acessos-negados', ['rows' => $rows]);
@@ -861,14 +1211,22 @@ $app->get('/admin/usuarios/seguranca', function () {
 
 $app->post('/admin/usuarios/:id_usuario/status', function ($id_usuario) {
     Funcionarios::checkPermission('USUARIOS_SECURITY_MANAGE');
-    Funcionarios::setUserActive((int)$id_usuario, (int)($_POST['ativo'] ?? 0));
+    portal_require_csrf($_POST);
+    $ativo = (int)($_POST['ativo'] ?? 0) === 1 ? 1 : 0;
+    if ((int)$id_usuario === (int)($_SESSION[Funcionarios::SESSION]['id_usuario'] ?? 0) && $ativo === 0) {
+        Funcionarios::setError('O usuário conectado não pode bloquear o próprio acesso.');
+        header('Location: /admin/usuarios/seguranca');
+        exit;
+    }
+    Funcionarios::setUserActive((int)$id_usuario, $ativo);
     header('Location: /admin/usuarios/seguranca');
     exit;
 });
 
 $app->post('/admin/funcionarios/:id_pessoa/status-funcionario', function ($id_pessoa) {
     Funcionarios::checkPermission('USUARIOS_SECURITY_MANAGE');
-    Funcionarios::setFuncionarioActive((int)$id_pessoa, (int)($_POST['ativo'] ?? 0));
+    portal_require_csrf($_POST);
+    Funcionarios::setFuncionarioActive((int)$id_pessoa, (int)($_POST['ativo'] ?? 0) === 1 ? 1 : 0);
     header('Location: /admin/usuarios/seguranca');
     exit;
 });
@@ -877,28 +1235,132 @@ $app->get('/admin/seguranca/auditoria', function () {
     Funcionarios::checkPermission('AUDITORIA_VIEW');
 
     $sql = new Sql();
+    $columns = [];
+    foreach ($sql->select("SHOW COLUMNS FROM tb_userlogs") as $column) {
+        $columns[$column['Field']] = true;
+    }
+
+    $where = [];
+    $params = [];
+    $filters = [
+        'inicio' => trim((string)($_GET['inicio'] ?? '')),
+        'fim' => trim((string)($_GET['fim'] ?? '')),
+        'usuario' => trim((string)($_GET['usuario'] ?? '')),
+        'login' => trim((string)($_GET['login'] ?? '')),
+        'categoria' => trim((string)($_GET['categoria'] ?? '')),
+        'acao' => trim((string)($_GET['acao'] ?? '')),
+        'modulo' => trim((string)($_GET['modulo'] ?? '')),
+        'entidade' => trim((string)($_GET['entidade'] ?? '')),
+        'registro_id' => trim((string)($_GET['registro_id'] ?? '')),
+        'ip' => trim((string)($_GET['ip'] ?? '')),
+        'status' => trim((string)($_GET['status'] ?? '')),
+        'severidade' => trim((string)($_GET['severidade'] ?? '')),
+    ];
+
+    if ($filters['inicio'] !== '') {
+        $where[] = 'created_at >= :inicio';
+        $params[':inicio'] = portal_to_utc_sql($filters['inicio'] . ' 00:00:00');
+    }
+    if ($filters['fim'] !== '') {
+        $where[] = 'created_at <= :fim';
+        $params[':fim'] = portal_to_utc_sql($filters['fim'] . ' 23:59:59');
+    }
+    if ($filters['usuario'] !== '') {
+        $where[] = 'nome_funcionario LIKE :usuario';
+        $params[':usuario'] = '%' . $filters['usuario'] . '%';
+    }
+    if ($filters['login'] !== '') {
+        $where[] = 'cpf_usuario LIKE :login';
+        $params[':login'] = '%' . $filters['login'] . '%';
+    }
+    foreach (['categoria', 'acao', 'modulo', 'entidade', 'registro_id', 'ip', 'status', 'severidade'] as $field) {
+        if ($filters[$field] !== '' && isset($columns[$field])) {
+            $where[] = $field . ' = :' . $field;
+            $params[':' . $field] = $filters[$field];
+        }
+    }
+
+    $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+    $currentPage = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+    $pageSize = isset($_GET['pageSize']) ? (int)$_GET['pageSize'] : 100;
+    if ($pageSize < 25) {
+        $pageSize = 25;
+    }
+    if ($pageSize > 300) {
+        $pageSize = 300;
+    }
+    $offset = ($currentPage - 1) * $pageSize;
+    $totalRows = $sql->select("SELECT COUNT(*) AS total FROM tb_userlogs {$whereSql}", $params);
+    $total = (int)($totalRows[0]['total'] ?? 0);
+    $pages = max(1, (int)ceil($total / $pageSize));
+    if ($currentPage > $pages) {
+        $currentPage = $pages;
+        $offset = ($currentPage - 1) * $pageSize;
+    }
+
     $logs = $sql->select("
         SELECT *
         FROM tb_userlogs
+        {$whereSql}
         ORDER BY created_at DESC
-        LIMIT 300
-    ");
+        LIMIT {$offset}, {$pageSize}
+    ", $params);
+    foreach ($logs as &$log) {
+        foreach (['categoria', 'severidade', 'descricao', 'entidade', 'registro_id', 'status', 'metodo_http', 'rota', 'sessao_id'] as $field) {
+            if (!isset($log[$field])) {
+                $log[$field] = '';
+            }
+        }
+        $log['categoria'] = $log['categoria'] ?: ($log['acao'] ?? '');
+        $log['descricao'] = $log['descricao'] ?: ($log['detalhes'] ?? '');
+        $log['registro_id'] = $log['registro_id'] ?: ($log['referencia_id'] ?? '');
+        $log['status'] = $log['status'] ?: 'SUCCESS';
+        $log['created_at'] = portal_format_manaus($log['created_at'] ?? null);
+        foreach (['dados_anteriores', 'dados_novos', 'alteracoes', 'erro'] as $jsonField) {
+            if (!empty($log[$jsonField])) {
+                $decoded = json_decode((string)$log[$jsonField], true);
+                $log[$jsonField . '_pretty'] = json_last_error() === JSON_ERROR_NONE
+                    ? json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                    : (string)$log[$jsonField];
+            } else {
+                $log[$jsonField . '_pretty'] = '';
+            }
+        }
+    }
+    unset($log);
 
     $page = new PageAdmin();
+    $queryBase = array_filter($filters, function ($value) {
+        return trim((string)$value) !== '';
+    });
+    $queryBase['pageSize'] = $pageSize;
+
     $page->setTpl('seguranca-auditoria', [
-        'logs' => $logs
+        'logs' => $logs,
+        'filters' => $filters,
+        'pagination' => [
+            'page' => $currentPage,
+            'pageSize' => $pageSize,
+            'pages' => $pages,
+            'total' => $total,
+            'from' => $total > 0 ? $offset + 1 : 0,
+            'to' => min($offset + $pageSize, $total),
+            'prevUrl' => $currentPage > 1 ? '/admin/seguranca/auditoria?' . http_build_query(array_merge($queryBase, ['page' => $currentPage - 1])) : '',
+            'nextUrl' => $currentPage < $pages ? '/admin/seguranca/auditoria?' . http_build_query(array_merge($queryBase, ['page' => $currentPage + 1])) : '',
+        ]
     ]);
 });
 
 
 
 $app->get('/admin/relatorio/planilha', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('PLANILHA_VIEW');
 
+    require_once APP_DIR . '/services/AccessScopeService.php';
     require_once APP_DIR . '/helpers/RelatorioPlanilhaDashboard.php';
 
     $sql = new Sql();
-    $dashboard = new RelatorioPlanilhaDashboard($sql);
+    $dashboard = new RelatorioPlanilhaDashboard($sql, new AccessScopeService($sql));
 
     $page = new PageAdmin();
     $page->setTpl('relatorio-planilha', [
@@ -906,21 +1368,24 @@ $app->get('/admin/relatorio/planilha', function () {
             'ano' => isset($_GET['ano']) ? (int)$_GET['ano'] : (int)date('Y'),
             'mes' => isset($_GET['mes']) ? (int)$_GET['mes'] : (int)date('n'),
             'somente_fechados' => isset($_GET['somente_fechados']) ? (int)$_GET['somente_fechados'] : 1,
+            'regiao' => isset($_GET['regiao']) ? strtoupper(trim((string)$_GET['regiao'])) : '',
         ],
         'can_exportar' => $dashboard->canExport(),
     ]);
 });
 
 $app->get('/admin/api/relatorio/planilha/painel', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('PLANILHA_VIEW');
     header('Content-Type: application/json; charset=utf-8');
 
     try {
+        require_once APP_DIR . '/services/AccessScopeService.php';
         require_once APP_DIR . '/helpers/RelatorioPlanilhaDashboard.php';
 
         $ano = isset($_GET['ano']) ? (int)$_GET['ano'] : (int)date('Y');
         $mes = isset($_GET['mes']) ? (int)$_GET['mes'] : (int)date('n');
         $somenteFechados = isset($_GET['somente_fechados']) ? ((int)$_GET['somente_fechados'] === 1) : true;
+        $regiao = isset($_GET['regiao']) ? strtoupper(trim((string)$_GET['regiao'])) : '';
 
         if ($ano < 2000 || $ano > 2100) {
             throw new Exception('Ano inválido.');
@@ -931,8 +1396,9 @@ $app->get('/admin/api/relatorio/planilha/painel', function () {
         }
 
         $sql = new Sql();
-        $dashboard = new RelatorioPlanilhaDashboard($sql);
-        $painel = $dashboard->getPainel($ano, $mes, $somenteFechados);
+        $scope = new AccessScopeService($sql);
+        $dashboard = new RelatorioPlanilhaDashboard($sql, $scope);
+        $painel = $dashboard->getPainel($ano, $mes, $somenteFechados, $scope->normalizeRegionCode($regiao));
 
         echo json_encode([
             'success' => true,
@@ -950,12 +1416,14 @@ $app->get('/admin/api/relatorio/planilha/painel', function () {
 });
 
 $app->get('/admin/api/relatorio/planilha/arquivo', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('PLANILHA_VIEW');
+    Funcionarios::checkPermission('PLANILHA_EXPORT');
 
+    require_once APP_DIR . '/services/AccessScopeService.php';
     require_once APP_DIR . '/helpers/RelatorioPlanilhaDashboard.php';
 
     $sql = new Sql();
-    $dashboard = new RelatorioPlanilhaDashboard($sql);
+    $dashboard = new RelatorioPlanilhaDashboard($sql, new AccessScopeService($sql));
 
     if (!$dashboard->canExport()) {
         http_response_code(403);
@@ -976,6 +1444,18 @@ $app->get('/admin/api/relatorio/planilha/arquivo', function () {
     $path = $located['path'];
     $name = $located['name'] ?? basename($path);
 
+    AuditLogger::log([
+        'categoria' => AuditLogger::DOWNLOAD,
+        'acao' => 'PLANILHA_DOWNLOAD',
+        'modulo' => 'RELATORIOS',
+        'menu' => 'Relatórios',
+        'sub_menu' => 'Planilhas',
+        'entidade' => 'relatorio_planilha',
+        'registro_id' => $id > 0 ? $id : basename($name),
+        'descricao' => 'Usuário realizou download da planilha "' . basename($name) . '".',
+        'dados_novos' => ['arquivo' => basename($name), 'id' => $id, 'origem' => $file],
+    ]);
+
     header('Content-Description: File Transfer');
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     header('Content-Disposition: attachment; filename="' . basename($name) . '"');
@@ -989,7 +1469,8 @@ $app->get('/admin/api/relatorio/planilha/arquivo', function () {
 });
 
 $app->get('/admin/api/relatorio/planilha/exportar', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('PLANILHA_VIEW');
+    Funcionarios::checkPermission('PLANILHA_EXPORT');
 
     $isAjax = (
         (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string)$_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') ||
@@ -1002,11 +1483,13 @@ $app->get('/admin/api/relatorio/planilha/exportar', function () {
         }
 
         require_once APP_DIR . '/helpers/RelatorioPlanilhaMensalExporter.php';
+        require_once APP_DIR . '/services/AccessScopeService.php';
         require_once APP_DIR . '/helpers/RelatorioPlanilhaDashboard.php';
 
         $ano = isset($_GET['ano']) ? (int)$_GET['ano'] : (int)date('Y');
         $mes = isset($_GET['mes']) ? (int)$_GET['mes'] : (int)date('n');
         $somenteFechados = isset($_GET['somente_fechados']) ? ((int)$_GET['somente_fechados'] === 1) : true;
+        $regiao = isset($_GET['regiao']) ? strtoupper(trim((string)$_GET['regiao'])) : '';
 
         if ($ano < 2000 || $ano > 2100) {
             throw new Exception('Ano inválido.');
@@ -1022,13 +1505,15 @@ $app->get('/admin/api/relatorio/planilha/exportar', function () {
         }
 
         $sql = new Sql();
-        $dashboard = new RelatorioPlanilhaDashboard($sql);
+        $scope = new AccessScopeService($sql);
+        $regiao = $scope->normalizeRegionCode($regiao);
+        $dashboard = new RelatorioPlanilhaDashboard($sql, $scope);
 
         if (!$dashboard->canExport()) {
             throw new Exception('Você não possui permissão para gerar e baixar planilhas.');
         }
 
-        $exportador = new RelatorioPlanilhaMensalExporter($sql);
+        $exportador = new RelatorioPlanilhaMensalExporter($sql, $scope);
         if (isset($_GET['debug_planilha']) && (int)$_GET['debug_planilha'] === 1) {
             $exportador->setDebugPlanilha(true);
         }
@@ -1038,10 +1523,11 @@ $app->get('/admin/api/relatorio/planilha/exportar', function () {
             @mkdir($dirSaida, 0775, true);
         }
 
-        $nomeArquivo = sprintf('relatorio_mensal_%04d_%02d_%s.xlsx', $ano, $mes, date('Ymd_His'));
+        $sufixoRegiao = $regiao !== '' ? '_' . strtolower($regiao) : '';
+        $nomeArquivo = sprintf('relatorio_mensal_%04d_%02d%s_%s.xlsx', $ano, $mes, $sufixoRegiao, date('Ymd_His'));
         $outputPath = $dirSaida . '/' . $nomeArquivo;
 
-        $caminhoFinal = $exportador->exportar($templatePath, $outputPath, $ano, $mes, $somenteFechados);
+        $caminhoFinal = $exportador->exportar($templatePath, $outputPath, $ano, $mes, $somenteFechados, $regiao);
 
         if (!file_exists($caminhoFinal)) {
             throw new Exception('A planilha foi processada, mas o arquivo final não foi encontrado.');
@@ -1057,8 +1543,26 @@ $app->get('/admin/api/relatorio/planilha/exportar', function () {
             'mensagem_erro' => null,
             'responsavel' => method_exists($usuario, 'getnome_funcionario') ? $usuario->getnome_funcionario() : null,
             'cpf_responsavel' => method_exists($usuario, 'getcpf') ? $usuario->getcpf() : null,
-            'data_geracao' => date('Y-m-d H:i:s'),
-            'data_upload' => date('Y-m-d H:i:s'),
+            'data_geracao' => portal_utc_now(),
+            'data_upload' => portal_utc_now(),
+        ]);
+
+        AuditLogger::log([
+            'categoria' => AuditLogger::EXPORT,
+            'acao' => 'PLANILHA_EXPORT',
+            'modulo' => 'RELATORIOS',
+            'menu' => 'Relatórios',
+            'sub_menu' => 'Planilhas',
+            'entidade' => 'relatorio_planilha',
+            'registro_id' => basename($caminhoFinal),
+            'descricao' => 'Usuário gerou e baixou a planilha mensal.',
+            'dados_novos' => [
+                'arquivo' => basename($caminhoFinal),
+                'ano' => $ano,
+                'mes' => $mes,
+                'somente_fechados' => $somenteFechados,
+                'regiao' => $regiao,
+            ],
         ]);
 
         header('Content-Description: File Transfer');
@@ -1072,6 +1576,12 @@ $app->get('/admin/api/relatorio/planilha/exportar', function () {
         readfile($caminhoFinal);
         exit;
     } catch (Exception $e) {
+        AuditLogger::logError($e, [
+            'acao' => 'PLANILHA_EXPORT_FAILED',
+            'modulo' => 'RELATORIOS',
+            'descricao' => 'Falha ao gerar planilha mensal.',
+        ]);
+
         if ($isAjax) {
             header('Content-Type: application/json; charset=utf-8');
             http_response_code(500);
@@ -1096,14 +1606,14 @@ $app->get('/admin/api/relatorio/planilha/exportar', function () {
 
 
 $app->get('/admin/relatorio/pdf/historico', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('PDF_HISTORICO_VIEW');
 
     $page = new PageAdmin();
     $page->setTpl('relatorio-pdf-historico');
 });
 
 $app->get('/admin/api/relatorio/pdf/historico', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('PDF_HISTORICO_VIEW');
 
     header('Content-Type: application/json; charset=utf-8');
 
@@ -1127,6 +1637,26 @@ $app->get('/admin/api/relatorio/pdf/historico', function () {
         $total = isset($totalResult[0]['total']) ? (int)$totalResult[0]['total'] : 0;
 
         $items = $sql->select("\n            SELECT\n                " . implode(",\n                ", $select) . "\n            FROM tb_relatorios_pdf\n            {$whereSql}\n            ORDER BY id DESC\n            LIMIT {$offset}, {$pageSize}\n        ", $params);
+        foreach ($items as &$item) {
+            if (!empty($item['data_geracao'])) {
+                $item['data_geracao'] = portal_format_manaus($item['data_geracao']);
+            }
+            if (!empty($item['data_upload'])) {
+                $item['data_upload'] = portal_format_manaus($item['data_upload']);
+            }
+        }
+        unset($item);
+
+        AuditLogger::log([
+            'categoria' => AuditLogger::SEARCH,
+            'acao' => 'PDF_HISTORICO_SEARCH',
+            'modulo' => 'RELATORIOS',
+            'menu' => 'Relatórios',
+            'sub_menu' => 'PDFs',
+            'entidade' => 'relatorio_pdf',
+            'descricao' => 'Usuário pesquisou o histórico de relatórios PDF.',
+            'dados_novos' => ['filtros' => AuditLogger::sanitize($_GET), 'total' => $total],
+        ]);
 
         echo json_encode(array(
             'success' => true,
@@ -1137,6 +1667,12 @@ $app->get('/admin/api/relatorio/pdf/historico', function () {
             'items' => $items
         ));
     } catch (Exception $e) {
+        AuditLogger::logError($e, [
+            'acao' => 'PDF_HISTORICO_SEARCH_FAILED',
+            'modulo' => 'RELATORIOS',
+            'descricao' => 'Falha ao pesquisar histórico de relatórios PDF.',
+        ]);
+
         http_response_code(500);
         echo json_encode(array(
             'success' => false,
@@ -1148,7 +1684,7 @@ $app->get('/admin/api/relatorio/pdf/historico', function () {
 });
 
 $app->post('/admin/relatorio/pdf/download-lote', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('PDF_HISTORICO_VIEW');
 
     try {
         if (!class_exists('ZipArchive')) {
@@ -1170,7 +1706,7 @@ $app->post('/admin/relatorio/pdf/download-lote', function () {
         $sql = new Sql();
         $select = portalPdfSelectColumns($sql);
         $params = [];
-        $whereSql = '';
+        $where = [];
 
         if (!empty($ids)) {
             $placeholders = [];
@@ -1179,7 +1715,11 @@ $app->post('/admin/relatorio/pdf/download-lote', function () {
                 $placeholders[] = $key;
                 $params[$key] = $id;
             }
-            $whereSql = 'WHERE id IN (' . implode(',', $placeholders) . ')';
+            $where[] = 'id IN (' . implode(',', $placeholders) . ')';
+            require_once APP_DIR . '/services/AccessScopeService.php';
+            $scope = new AccessScopeService($sql);
+            [$where, $params] = $scope->appendConstraint($where, $params, $scope->dataConstraint('tb_relatorios_pdf', 'tb_relatorios_pdf', 'pdf_lote_ids'));
+            $whereSql = 'WHERE ' . implode(' AND ', $where);
         } else {
             $filters = isset($payload['filters']) && is_array($payload['filters']) ? $payload['filters'] : [];
             $filter = portalPdfBuildHistoricoFilter($sql, $filters);
@@ -1287,10 +1827,36 @@ $app->post('/admin/relatorio/pdf/download-lote', function () {
         header('X-PDF-Zip-Added: ' . $added);
         header('X-PDF-Zip-Missing: ' . count($missing));
         header('Content-Length: ' . filesize($zipPath));
+
+        AuditLogger::log([
+            'categoria' => AuditLogger::DOWNLOAD,
+            'acao' => 'PDF_LOTE_DOWNLOAD',
+            'modulo' => 'RELATORIOS',
+            'menu' => 'Relatórios',
+            'sub_menu' => 'PDFs',
+            'entidade' => 'relatorio_pdf',
+            'registro_id' => !empty($ids) ? implode(',', $ids) : 'filtro',
+            'descricao' => 'Usuário realizou download em lote de relatórios PDF.',
+            'dados_novos' => [
+                'arquivo' => basename($zipName),
+                'quantidade_adicionada' => $added,
+                'quantidade_ausente' => count($missing),
+                'ids' => $ids,
+                'filtros' => $payload['filters'] ?? [],
+            ],
+            'status' => count($missing) > 0 ? 'PARTIAL_SUCCESS' : 'SUCCESS',
+        ]);
+
         readfile($zipPath);
         @unlink($zipPath);
         exit;
     } catch (Throwable $e) {
+        AuditLogger::logError($e, [
+            'acao' => 'PDF_LOTE_DOWNLOAD_FAILED',
+            'modulo' => 'RELATORIOS',
+            'descricao' => 'Falha durante download em lote de relatórios PDF.',
+        ]);
+
         portalPdfLog('Erro ao gerar ZIP: ' . $e->getMessage());
         header('Content-Type: application/json; charset=utf-8');
         http_response_code(500);
@@ -1303,12 +1869,13 @@ $app->post('/admin/relatorio/pdf/download-lote', function () {
 });
 
 $app->get('/admin/consulta-unificada', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('CONSULTA_UNIFICADA_VIEW');
 
     require_once APP_DIR . '/services/CadastroUnificadoService.php';
+    require_once APP_DIR . '/services/AccessScopeService.php';
 
     $sql = new Sql();
-    $service = new CadastroUnificadoService($sql);
+    $service = new CadastroUnificadoService($sql, new AccessScopeService($sql));
 
     $page = new PageAdmin();
     $page->setTpl('consulta-unificada', [
@@ -1318,12 +1885,14 @@ $app->get('/admin/consulta-unificada', function () {
 });
 
 $app->get('/admin/api/consulta-unificada/resumo', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('CONSULTA_UNIFICADA_VIEW');
     header('Content-Type: application/json; charset=utf-8');
 
     try {
+        require_once APP_DIR . '/services/AccessScopeService.php';
         require_once APP_DIR . '/services/CadastroUnificadoService.php';
-        $service = new CadastroUnificadoService(new Sql());
+        $sql = new Sql();
+        $service = new CadastroUnificadoService($sql, new AccessScopeService($sql));
 
         echo json_encode([
             'success' => true,
@@ -1344,12 +1913,14 @@ $app->get('/admin/api/consulta-unificada/resumo', function () {
 });
 
 $app->get('/admin/api/consulta-unificada/lista', function () {
-    Funcionarios::checkPermission('DASHBOARD_VIEW');
+    Funcionarios::checkPermission('CONSULTA_UNIFICADA_VIEW');
     header('Content-Type: application/json; charset=utf-8');
 
     try {
+        require_once APP_DIR . '/services/AccessScopeService.php';
         require_once APP_DIR . '/services/CadastroUnificadoService.php';
-        $service = new CadastroUnificadoService(new Sql());
+        $sql = new Sql();
+        $service = new CadastroUnificadoService($sql, new AccessScopeService($sql));
 
         $resultado = $service->pesquisar([
             'page' => $_GET['page'] ?? 1,
@@ -1357,15 +1928,39 @@ $app->get('/admin/api/consulta-unificada/lista', function () {
             'busca' => $_GET['busca'] ?? '',
             'tipo' => $_GET['tipo'] ?? '',
             'origem_banco' => $_GET['origem_banco'] ?? '',
+            'origem_bancos' => portalConsultaOrigemBancosFromRequest(),
             'origem_unidade' => $_GET['origem_unidade'] ?? '',
             'somente_ativos' => $_GET['somente_ativos'] ?? 0,
         ]);
+
+        $hasFilter = trim((string)($_GET['busca'] ?? '')) !== ''
+            || trim((string)($_GET['tipo'] ?? '')) !== ''
+            || trim((string)($_GET['origem_banco'] ?? '')) !== ''
+            || trim((string)($_GET['origem_unidade'] ?? '')) !== '';
+        if ($hasFilter) {
+            AuditLogger::log([
+                'categoria' => AuditLogger::SEARCH,
+                'acao' => 'CONSULTA_UNIFICADA_SEARCH',
+                'modulo' => 'RELATORIOS',
+                'menu' => 'Relatórios',
+                'sub_menu' => 'Consulta unificada',
+                'entidade' => 'cadastro_unificado',
+                'descricao' => 'Usuário pesquisou cadastros unificados.',
+                'dados_novos' => ['filtros' => AuditLogger::sanitize($_GET), 'total' => $resultado['total'] ?? null],
+            ]);
+        }
 
         echo json_encode([
             'success' => true,
             'data' => $resultado,
         ]);
     } catch (Throwable $e) {
+        AuditLogger::logError($e, [
+            'acao' => 'CONSULTA_UNIFICADA_SEARCH_FAILED',
+            'modulo' => 'RELATORIOS',
+            'descricao' => 'Falha ao pesquisar cadastros unificados.',
+        ]);
+
         http_response_code(500);
         echo json_encode([
             'success' => false,
@@ -1376,13 +1971,110 @@ $app->get('/admin/api/consulta-unificada/lista', function () {
     exit;
 });
 
+$app->get('/admin/api/consulta-unificada/download', function () {
+    try {
+        Funcionarios::checkPermission('CONSULTA_UNIFICADA_VIEW');
+
+        require_once APP_DIR . '/services/AccessScopeService.php';
+        require_once APP_DIR . '/services/CadastroUnificadoService.php';
+        $sql = new Sql();
+        $service = new CadastroUnificadoService($sql, new AccessScopeService($sql));
+
+        $resultado = $service->exportar([
+            'busca' => $_GET['busca'] ?? '',
+            'tipo' => $_GET['tipo'] ?? '',
+            'origem_banco' => $_GET['origem_banco'] ?? '',
+            'origem_bancos' => portalConsultaOrigemBancosFromRequest(),
+            'origem_unidade' => $_GET['origem_unidade'] ?? '',
+            'somente_ativos' => $_GET['somente_ativos'] ?? 0,
+        ]);
+
+        $filename = 'consulta-unificada-' . date('Ymd-His') . '.csv';
+        AuditLogger::log([
+            'categoria' => AuditLogger::EXPORT,
+            'acao' => 'CONSULTA_UNIFICADA_EXPORT',
+            'modulo' => 'RELATORIOS',
+            'menu' => 'Relatórios',
+            'sub_menu' => 'Consulta unificada',
+            'entidade' => 'cadastro_unificado',
+            'registro_id' => $filename,
+            'descricao' => 'Usuário exportou cadastros unificados em CSV.',
+            'dados_novos' => [
+                'arquivo' => $filename,
+                'filtros' => AuditLogger::sanitize($_GET),
+                'total' => count($resultado['items'] ?? []),
+            ],
+        ]);
+
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, [
+            'tipo_cadastro',
+            'nome',
+            'cpf',
+            'rg',
+            'telefone',
+            'data_nascimento',
+            'idade',
+            'genero',
+            'status_ou_parentesco',
+            'origem_unidade',
+            'origem_banco',
+            'origem_tabela',
+            'origem_id',
+            'data_cadastro',
+            'data_atualizacao',
+            'data_sync',
+        ], ';');
+
+        foreach ($resultado['items'] as $item) {
+            fputcsv($out, [
+                $item['tipo_cadastro'] ?? '',
+                $item['nome'] ?? '',
+                $item['cpf'] ?? '',
+                $item['rg'] ?? '',
+                $item['telefone'] ?? '',
+                $item['data_nascimento'] ?? '',
+                $item['idade'] ?? '',
+                $item['genero'] ?? '',
+                ($item['tipo_cadastro'] ?? '') === 'DEPENDENTE' ? ($item['parentesco'] ?? '') : ($item['status_cliente'] ?? ''),
+                $item['origem_unidade'] ?? '',
+                $item['origem_banco'] ?? '',
+                $item['origem_tabela'] ?? '',
+                $item['origem_id'] ?? '',
+                $item['registration_date'] ?? '',
+                $item['registration_date_update'] ?? '',
+                $item['data_sync'] ?? '',
+            ], ';');
+        }
+        fclose($out);
+    } catch (Throwable $e) {
+        AuditLogger::logError($e, [
+            'acao' => 'CONSULTA_UNIFICADA_EXPORT_FAILED',
+            'modulo' => 'RELATORIOS',
+            'descricao' => 'Falha ao exportar cadastros unificados.',
+        ]);
+
+        http_response_code(500);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Não foi possível gerar o arquivo: ' . $e->getMessage();
+    }
+    exit;
+});
+
 $app->post('/admin/api/consulta-unificada/sincronizar', function () {
     header('Content-Type: application/json; charset=utf-8');
 
     try {
-        Funcionarios::checkPermission('DASHBOARD_VIEW');
+        Funcionarios::checkPermission('CONSULTA_UNIFICADA_VIEW');
+        Funcionarios::checkPermission('CONSULTA_UNIFICADA_SYNC');
 
         $serviceFile = APP_DIR . '/services/CadastroUnificadoService.php';
+        require_once APP_DIR . '/services/AccessScopeService.php';
         if (!file_exists($serviceFile)) {
             throw new Exception('Arquivo não encontrado: ' . $serviceFile);
         }
@@ -1407,7 +2099,8 @@ $app->post('/admin/api/consulta-unificada/sincronizar', function () {
             return !is_null($id) && $id > 0;
         }));
 
-        $service = new CadastroUnificadoService(new Sql());
+        $sql = new Sql();
+        $service = new CadastroUnificadoService($sql, new AccessScopeService($sql));
         $resultado = $service->sincronizar($baseIds, ['tb_titular', 'tb_dependentes']);
 
         echo json_encode([

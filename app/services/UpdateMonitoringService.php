@@ -5,10 +5,12 @@ use Hcode\DB\Sql;
 class UpdateMonitoringService
 {
     private $sql;
+    private $scope;
 
-    public function __construct(Sql $sql)
+    public function __construct(Sql $sql, ?AccessScopeService $scope = null)
     {
         $this->sql = $sql;
+        $this->scope = $scope ?: new AccessScopeService($sql);
     }
 
     public function ensureSchema(): void
@@ -66,7 +68,7 @@ class UpdateMonitoringService
             ) VALUES (
                 :unidade_id, :nome_unidade, :sistema, :versao_atual, :versao_disponivel, :status, :etapa,
                 :mensagem, :stack_trace, :arquivos_ausentes, :data_hora_local, :ip_origem, :user_agent,
-                :tempo_instalacao_segundos, :payload_json, NOW()
+                :tempo_instalacao_segundos, :payload_json, UTC_TIMESTAMP()
             )
         ", [
             ':unidade_id' => $unidadeId,
@@ -87,8 +89,8 @@ class UpdateMonitoringService
         ]);
 
         $installedVersion = $status === 'instalado' && $versaoDisponivel !== '' ? $versaoDisponivel : $versaoAtual;
-        $ultimoDownload = in_array($status, ['download_concluido'], true) ? 'NOW()' : 'ultimo_download';
-        $ultimaInstalacao = $status === 'instalado' ? 'NOW()' : 'ultima_instalacao';
+        $ultimoDownload = in_array($status, ['download_concluido'], true) ? 'UTC_TIMESTAMP()' : 'ultimo_download';
+        $ultimaInstalacao = $status === 'instalado' ? 'UTC_TIMESTAMP()' : 'ultima_instalacao';
 
         $this->sql->query("
             INSERT INTO tb_atualizacoes_unidades (
@@ -101,8 +103,8 @@ class UpdateMonitoringService
                 :unidade_id, :nome_unidade, :municipio, :tipo_unidade, :sistema, :versao_instalada,
                 :versao_disponivel, :status_atual, :status_label, :etapa, :mensagem, :arquivos_ausentes,
                 :stack_trace,
-                NOW(), " . ($ultimoDownload === 'NOW()' ? 'NOW()' : 'NULL') . ", " . ($ultimaInstalacao === 'NOW()' ? 'NOW()' : 'NULL') . ", :data_hora_local,
-                :ip_origem, :user_agent, :tempo_instalacao_segundos, :payload_json, NOW()
+                UTC_TIMESTAMP(), " . ($ultimoDownload === 'UTC_TIMESTAMP()' ? 'UTC_TIMESTAMP()' : 'NULL') . ", " . ($ultimaInstalacao === 'UTC_TIMESTAMP()' ? 'UTC_TIMESTAMP()' : 'NULL') . ", :data_hora_local,
+                :ip_origem, :user_agent, :tempo_instalacao_segundos, :payload_json, UTC_TIMESTAMP()
             )
             ON DUPLICATE KEY UPDATE
                 nome_unidade = COALESCE(NULLIF(VALUES(nome_unidade), ''), nome_unidade),
@@ -116,9 +118,9 @@ class UpdateMonitoringService
                 mensagem = VALUES(mensagem),
                 stack_trace = VALUES(stack_trace),
                 arquivos_ausentes = VALUES(arquivos_ausentes),
-                ultima_comunicacao = NOW(),
-                ultimo_download = IF(:is_download = 1, NOW(), ultimo_download),
-                ultima_instalacao = IF(:is_installed = 1, NOW(), ultima_instalacao),
+                ultima_comunicacao = UTC_TIMESTAMP(),
+                ultimo_download = IF(:is_download = 1, UTC_TIMESTAMP(), ultimo_download),
+                ultima_instalacao = IF(:is_installed = 1, UTC_TIMESTAMP(), ultima_instalacao),
                 data_hora_local = VALUES(data_hora_local),
                 ip_origem = VALUES(ip_origem),
                 user_agent = VALUES(user_agent),
@@ -225,12 +227,16 @@ class UpdateMonitoringService
         }
         if (!empty($filters['data_inicio'])) {
             $where[] = 'u.ultima_comunicacao >= :data_inicio';
-            $params[':data_inicio'] = $this->normalizeDateTime($filters['data_inicio']) ?: date('Y-m-d 00:00:00');
+            [$startUtc] = portal_manaus_day_utc_bounds((string)$filters['data_inicio']);
+            $params[':data_inicio'] = $startUtc;
         }
         if (!empty($filters['data_fim'])) {
             $where[] = 'u.ultima_comunicacao <= :data_fim';
-            $params[':data_fim'] = $this->normalizeDateTime($filters['data_fim']) ?: date('Y-m-d 23:59:59');
+            [, $endUtc] = portal_manaus_day_utc_bounds((string)$filters['data_fim']);
+            $params[':data_fim'] = $endUtc;
         }
+
+        [$where, $params] = $this->appendUnitScope($where, $params, 'u', 'updates_units');
 
         $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
         $rows = $this->sql->select("
@@ -289,21 +295,30 @@ class UpdateMonitoringService
         }
         if (!empty($filters['data_inicio'])) {
             $where[] = 'created_at >= :data_inicio';
-            $params[':data_inicio'] = $this->normalizeDateTime($filters['data_inicio']) ?: date('Y-m-d 00:00:00');
+            [$startUtc] = portal_manaus_day_utc_bounds((string)$filters['data_inicio']);
+            $params[':data_inicio'] = $startUtc;
         }
         if (!empty($filters['data_fim'])) {
             $where[] = 'created_at <= :data_fim';
-            $params[':data_fim'] = $this->normalizeDateTime($filters['data_fim']) ?: date('Y-m-d 23:59:59');
+            [, $endUtc] = portal_manaus_day_utc_bounds((string)$filters['data_fim']);
+            $params[':data_fim'] = $endUtc;
         }
+        [$where, $params] = $this->appendUnitScope($where, $params, '', 'updates_logs');
         $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-        return $this->sql->select("
+        $rows = $this->sql->select("
             SELECT *
             FROM tb_logs_atualizacoes
             {$whereSql}
             ORDER BY created_at DESC
             LIMIT 200
         ", $params);
+        foreach ($rows as &$row) {
+            $row['created_at'] = portal_format_manaus($row['created_at'] ?? null);
+            $row['data_hora_local'] = portal_format_manaus($row['data_hora_local'] ?? null);
+        }
+        unset($row);
+        return $rows;
     }
 
     public function updateConfig($minutes): void
@@ -368,7 +383,14 @@ class UpdateMonitoringService
         $summary['pendentes'] = max(0, $summary['total'] - $summary['instaladas'] - $summary['erro']);
         $summary['percentual_instalacao'] = $summary['total'] > 0 ? round(($summary['instaladas'] / $summary['total']) * 100, 1) : 0;
 
-        return ['version' => $rows[0] ?? ['versao' => $version], 'summary' => $summary, 'units' => $units];
+        $versionRow = $rows[0] ?? ['versao' => $version];
+        foreach (['publicado_em', 'created_at', 'updated_at'] as $field) {
+            if (!empty($versionRow[$field])) {
+                $versionRow[$field] = portal_format_manaus($versionRow[$field]);
+            }
+        }
+
+        return ['version' => $versionRow, 'summary' => $summary, 'units' => $units];
     }
 
     public function filterOptions(): array
@@ -426,10 +448,10 @@ class UpdateMonitoringService
             'status_calculado' => $status,
             'status_class' => $this->statusClass($status),
             'etapa' => $etapa ?: '',
-            'ultima_comunicacao' => $row['ultima_comunicacao'] ?: '-',
-            'ultimo_download' => $row['ultimo_download'] ?: '-',
-            'ultima_instalacao' => $row['ultima_instalacao'] ?: '-',
-            'data_hora_local' => $row['data_hora_local'] ?: '-',
+            'ultima_comunicacao' => portal_format_manaus($row['ultima_comunicacao'] ?? null),
+            'ultimo_download' => portal_format_manaus($row['ultimo_download'] ?? null),
+            'ultima_instalacao' => portal_format_manaus($row['ultima_instalacao'] ?? null),
+            'data_hora_local' => portal_format_manaus($row['data_hora_local'] ?? null),
             'ip_origem' => $row['ip_origem'] ?: '-',
             'tempo_instalacao_segundos' => $row['tempo_instalacao_segundos'] ?? '',
             'tempo_sem_comunicacao' => $this->timeAgo($row['ultima_comunicacao'] ?? null, $databaseNow),
@@ -438,7 +460,7 @@ class UpdateMonitoringService
             'arquivos_ausentes' => implode(', ', $missing),
             'payload_json' => $this->redactSensitive($payloadJson ?: ''),
             'ultimo_log_status' => $ultimoStatus,
-            'ultimo_log_em' => $row['ultimo_log_em'] ?: '',
+            'ultimo_log_em' => portal_format_manaus($row['ultimo_log_em'] ?? null),
             'consultou' => $consultou,
             'baixou' => $baixou,
             'instalou' => $instalou,
@@ -466,23 +488,38 @@ class UpdateMonitoringService
 
     private function byVersion(): array
     {
+        $where = [];
+        $params = [];
+        [$where, $params] = $this->appendUnitScope($where, $params, 'tb_atualizacoes_unidades', 'updates_by_version');
+        $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
         return $this->sql->select("
             SELECT COALESCE(NULLIF(versao_instalada, ''), 'sem versao') AS versao, COUNT(*) AS total
             FROM tb_atualizacoes_unidades
+            {$whereSql}
             GROUP BY COALESCE(NULLIF(versao_instalada, ''), 'sem versao')
             ORDER BY total DESC, versao DESC
-        ");
+        ", $params);
     }
 
     private function recentErrors(): array
     {
-        return $this->sql->select("
+        $where = ["status = 'erro'"];
+        $params = [];
+        [$where, $params] = $this->appendUnitScope($where, $params, 'tb_logs_atualizacoes', 'updates_recent_errors');
+
+        $rows = $this->sql->select("
             SELECT unidade_id, nome_unidade, versao_atual, versao_disponivel, etapa, mensagem, created_at
             FROM tb_logs_atualizacoes
-            WHERE status = 'erro'
+            WHERE " . implode(' AND ', $where) . "
             ORDER BY created_at DESC
             LIMIT 20
-        ");
+        ", $params);
+        foreach ($rows as &$row) {
+            $row['created_at'] = portal_format_manaus($row['created_at'] ?? null);
+        }
+        unset($row);
+        return $rows;
     }
 
     private function latestPublishedVersion(): array
@@ -493,7 +530,13 @@ class UpdateMonitoringService
             ORDER BY publicado_em DESC, created_at DESC, id_atualizacao DESC
             LIMIT 1
         ");
-        return $rows[0] ?? [];
+        $row = $rows[0] ?? [];
+        foreach (['publicado_em', 'created_at', 'updated_at'] as $field) {
+            if (!empty($row[$field])) {
+                $row[$field] = portal_format_manaus($row[$field]);
+            }
+        }
+        return $row;
     }
 
     private function registerUpdateVersion(string $version, array $payload): void
@@ -514,7 +557,7 @@ class UpdateMonitoringService
             ':url_download' => $this->cleanText($payload['url_download'] ?? '', 500),
             ':changelog' => $this->cleanText($payload['changelog'] ?? '', 5000),
             ':checksum' => $this->cleanText($payload['checksum_sha256'] ?? '', 120),
-            ':publicado_em' => $this->normalizeDateTime($payload['publicado_em'] ?? '') ?: null,
+            ':publicado_em' => $this->normalizeDateTime($payload['publicado_em'] ?? '', PORTAL_TIMEZONE_STORAGE) ?: null,
         ]);
     }
 
@@ -589,8 +632,8 @@ class UpdateMonitoringService
 
     private function databaseNow(): string
     {
-        $rows = $this->sql->select("SELECT NOW() AS agora");
-        return (string)($rows[0]['agora'] ?? date('Y-m-d H:i:s'));
+        $rows = $this->sql->select("SELECT UTC_TIMESTAMP() AS agora");
+        return (string)($rows[0]['agora'] ?? portal_utc_now());
     }
 
     private function normalizeMissingFiles($value): array
@@ -603,12 +646,11 @@ class UpdateMonitoringService
         return is_array($value) ? $this->cleanMissingFiles($value) : [];
     }
 
-    private function normalizeDateTime($value)
+    private function normalizeDateTime($value, string $sourceTimezone = PORTAL_TIMEZONE_DISPLAY)
     {
         $value = trim((string)$value);
         if ($value === '') return null;
-        $ts = strtotime($value);
-        return $ts > 0 ? date('Y-m-d H:i:s', $ts) : null;
+        return portal_to_utc_sql($value, $sourceTimezone);
     }
 
     private function inferUnitId(array $payload, array $server = []): string
@@ -673,6 +715,37 @@ class UpdateMonitoringService
         return version_compare($installed, $latest, '==');
     }
 
+    private function appendUnitScope(array $where, array $params, string $alias, string $prefix): array
+    {
+        if ($this->scope->canViewAll()) {
+            return [$where, $params];
+        }
+
+        $tokens = $this->scope->allowedUnitTokens();
+        if (empty($tokens)) {
+            $where[] = '1 = 0';
+            return [$where, $params];
+        }
+
+        $unitColumn = ($alias !== '' ? $alias . '.' : '') . 'unidade_id';
+        $nameColumn = ($alias !== '' ? $alias . '.' : '') . 'nome_unidade';
+        $unitPlaceholders = [];
+        $namePlaceholders = [];
+
+        foreach (array_values($tokens) as $idx => $token) {
+            $unitKey = ':' . $prefix . '_unit_' . $idx;
+            $nameKey = ':' . $prefix . '_name_' . $idx;
+            $unitPlaceholders[] = $unitKey;
+            $namePlaceholders[] = $nameKey;
+            $params[$unitKey] = $token;
+            $params[$nameKey] = $token;
+        }
+
+        $where[] = '(' . $unitColumn . ' IN (' . implode(',', $unitPlaceholders) . ') OR ' . $nameColumn . ' IN (' . implode(',', $namePlaceholders) . '))';
+
+        return [$where, $params];
+    }
+
     private function isOldVersion($installed, string $latest): bool
     {
         $installed = trim((string)$installed);
@@ -691,12 +764,16 @@ class UpdateMonitoringService
         if (!in_array($column, $allowed, true)) {
             return [];
         }
+        $where = ["{$column} IS NOT NULL", "{$column} <> ''"];
+        $params = [];
+        [$where, $params] = $this->appendUnitScope($where, $params, 'tb_atualizacoes_unidades', 'updates_distinct_' . $column);
+
         $rows = $this->sql->select("
             SELECT DISTINCT {$column} AS valor
             FROM tb_atualizacoes_unidades
-            WHERE {$column} IS NOT NULL AND {$column} <> ''
+            WHERE " . implode(' AND ', $where) . "
             ORDER BY {$column} ASC
-        ");
+        ", $params);
         return array_map(function ($row) {
             return $row['valor'];
         }, $rows);
@@ -704,12 +781,16 @@ class UpdateMonitoringService
 
     private function distinctAvailableVersions(): array
     {
+        $where = ["versao_disponivel IS NOT NULL", "versao_disponivel <> ''"];
+        $params = [];
+        [$where, $params] = $this->appendUnitScope($where, $params, 'tb_atualizacoes_unidades', 'updates_available_versions');
+
         $rows = $this->sql->select("
             SELECT versao AS valor FROM tb_atualizacoes WHERE versao IS NOT NULL AND versao <> ''
             UNION
-            SELECT versao_disponivel AS valor FROM tb_atualizacoes_unidades WHERE versao_disponivel IS NOT NULL AND versao_disponivel <> ''
+            SELECT versao_disponivel AS valor FROM tb_atualizacoes_unidades WHERE " . implode(' AND ', $where) . "
             ORDER BY valor DESC
-        ");
+        ", $params);
         return array_map(function ($row) {
             return $row['valor'];
         }, $rows);

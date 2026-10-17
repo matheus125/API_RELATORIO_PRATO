@@ -21,3 +21,11 @@ define('VIEW_CACHE_DIR', STORAGE_DIR . '/cache/views');
 define('VIEW_DIR', APP_DIR . '/views');
 define('DATABASE_DIR', ROOT_DIR . '/database');
 define('SQL_DIR', DATABASE_DIR . '/sql');
+
+require_once APP_DIR . '/helpers/time.php';
+
+$portalTimezone = portal_env('APP_TIMEZONE', PORTAL_TIMEZONE_DISPLAY);
+if (!in_array($portalTimezone, timezone_identifiers_list(), true)) {
+    $portalTimezone = PORTAL_TIMEZONE_DISPLAY;
+}
+date_default_timezone_set($portalTimezone);

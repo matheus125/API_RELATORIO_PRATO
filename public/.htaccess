@@ -1,6 +1,10 @@
 Options -Indexes
 DirectoryIndex index.php
 
+<FilesMatch "^(?:\.env(?:\..*)?|.*\.(?:sql|log|bak|backup|old|orig|ini|cnf))$">
+  Require all denied
+</FilesMatch>
+
 RewriteEngine On
 
 RewriteCond %{REQUEST_FILENAME} !-f

@@ -57,7 +57,7 @@
   }
 
   .consulta-grid-top {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     margin-bottom: 20px;
   }
 
@@ -131,6 +131,14 @@
     margin: 0 0 10px;
   }
 
+  .stat-value-sm {
+    font-size: 1.05rem;
+    line-height: 1.3;
+    min-height: 2.6rem;
+    display: flex;
+    align-items: center;
+  }
+
   .stat-meta {
     color: #64748b;
     font-size: .88rem;
@@ -174,6 +182,46 @@
     border-radius: 18px;
     padding: 14px;
     background: #fbfdff;
+  }
+
+  .bank-filter-panel {
+    border: 1px solid #d7e0e8;
+    border-radius: 16px;
+    background: #fbfdff;
+    padding: 12px;
+  }
+
+  .bank-filter-actions,
+  .result-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .bank-filter-list {
+    display: grid;
+    gap: 8px;
+    max-height: 190px;
+    overflow: auto;
+    padding-right: 4px;
+  }
+
+  .bank-filter-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 8px 10px;
+    border: 1px solid #e8edf4;
+    border-radius: 12px;
+    background: #fff;
+    color: #334155;
+    font-size: .9rem;
+    line-height: 1.25;
+  }
+
+  .bank-filter-item .form-check-input {
+    margin-top: 2px;
   }
 
   .base-head {
@@ -259,6 +307,24 @@
     font-size: .85rem;
     text-transform: uppercase;
     letter-spacing: .03em;
+  }
+
+  .consulta-table tr.titular-row td {
+    background: #fbfdff;
+  }
+
+  .consulta-table tr.dependent-row td {
+    background: #ffffff;
+  }
+
+  .dependent-marker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #64748b;
+    font-size: .82rem;
+    font-weight: 700;
+    margin-bottom: 4px;
   }
 
   .name-cell {
@@ -373,8 +439,10 @@
         preservando a origem de cada registro para você filtrar por unidade, banco e tipo de cadastro.
       </p>
       <div class="consulta-hero-actions">
+        {if="canAccess('CONSULTA_UNIFICADA_SYNC')"}
         <button class="btn btn-primary" id="btnSincronizarTudo"><i class="bi bi-arrow-repeat"></i> Sincronizar bases
           ativas</button>
+        {/if}
         <button class="btn btn-outline-secondary" id="btnAtualizarPainel"><i class="bi bi-arrow-clockwise"></i>
           Atualizar painel</button>
       </div>
@@ -401,6 +469,11 @@
         <p class="stat-value" id="statTotalDependentes">{$resumo.total_dependentes}</p>
         <div class="stat-meta">Registros importados da tabela <code>tb_dependentes</code>.</div>
       </div>
+      <div class="consulta-card stat-card">
+        <div class="stat-label">Última sincronização</div>
+        <p class="stat-value stat-value-sm" id="statUltimaSync">{$resumo.ultima_sync}</p>
+        <div class="stat-meta">Referência mais recente da tabela central.</div>
+      </div>
     </div>
 
     <div class="consulta-grid-main">
@@ -415,9 +488,9 @@
         <div class="consulta-card-body">
           <form id="formConsulta" class="filter-grid">
             <div>
-              <label class="form-label">Buscar por nome, CPF ou RG</label>
+              <label class="form-label">Buscar por nome, CPF, RG ou telefone</label>
               <input type="text" class="form-control" name="busca" id="filtroBusca"
-                placeholder="Ex.: Maria, 12345678900, RG...">
+                placeholder="Ex.: Maria, 12345678900, RG, 92999999999...">
             </div>
             <div>
               <label class="form-label">Tipo de cadastro</label>
@@ -428,13 +501,23 @@
               </select>
             </div>
             <div>
-              <label class="form-label">Banco de origem</label>
-              <select class="form-select" name="origem_banco" id="filtroOrigemBanco">
-                <option value="">Todos</option>
+              <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+                <label class="form-label mb-0">Bancos de origem</label>
+                <div class="bank-filter-actions">
+                  <button class="btn btn-sm btn-light border" type="button" id="btnSelecionarBancos">Todos</button>
+                  <button class="btn btn-sm btn-light border" type="button" id="btnLimparBancos">Limpar</button>
+                </div>
+              </div>
+              <div class="bank-filter-panel">
+                <div class="bank-filter-list" id="filtroOrigemBancos">
                 {loop="$bases"}
-                <option value="{$value.nome_banco}">{$value.nome_banco}</option>
+                  <label class="bank-filter-item">
+                    <input class="form-check-input" type="checkbox" name="origem_bancos[]" value="{$value.nome_banco}">
+                    <span>{$value.nome_banco}</span>
+                  </label>
                 {/loop}
-              </select>
+                </div>
+              </div>
             </div>
             <div>
               <label class="form-label">Unidade de origem</label>
@@ -454,12 +537,13 @@
             </div>
             <div class="d-grid gap-2">
               <label class="form-label d-none d-md-block">Ações</label>
-              <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i> Consultar agora</button>
+              <button class="btn btn-primary" type="submit" id="btnConsultarAgora"><i class="bi bi-search"></i> Consultar agora</button>
               <button class="btn btn-light border" type="button" id="btnLimparFiltros"><i class="bi bi-eraser"></i>
                 Limpar filtros</button>
             </div>
           </form>
 
+          {if="canAccess('CONSULTA_UNIFICADA_SYNC')"}
           <hr class="my-4">
 
           <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
@@ -502,6 +586,7 @@
             <h4 class="consulta-card-title mb-2" style="font-size:1rem;">Retorno da sincronização</h4>
             <div class="sync-log" id="syncLog">Aguardando ação...</div>
           </div>
+          {/if}
         </div>
       </div>
 
@@ -515,7 +600,8 @@
         <div class="consulta-card-body">
           <div class="result-toolbar">
             <div class="result-info" id="resultadoInfo">Use os filtros e clique em consultar.</div>
-            <div>
+            <div class="result-actions">
+              <button class="btn btn-outline-success" type="button" id="btnBaixarCsv"><i class="bi bi-download"></i> Baixar CSV</button>
               <select class="form-select" id="pageSizeSelect" style="min-width:120px;">
                 <option value="10">10 / pág</option>
                 <option value="25" selected>25 / pág</option>
@@ -531,6 +617,7 @@
                 <tr>
                   <th>Cadastro</th>
                   <th>Documento</th>
+                  <th>Contato</th>
                   <th>Perfil</th>
                   <th>Origem</th>
                   <th>Status / vínculo</th>
@@ -539,7 +626,7 @@
               </thead>
               <tbody id="resultadoTabelaBody">
                 <tr>
-                  <td colspan="6">
+                  <td colspan="7">
                     <div class="empty-state">Nenhuma consulta executada ainda.</div>
                   </td>
                 </tr>
@@ -559,25 +646,30 @@
     const state = { page: 1, pageSize: 25, total: 0, pages: 1 };
 
     const els = {
-      form: document.getElementById('formConsulta'),
-      busca: document.getElementById('filtroBusca'),
-      tipo: document.getElementById('filtroTipo'),
-      origemBanco: document.getElementById('filtroOrigemBanco'),
-      origemUnidade: document.getElementById('filtroOrigemUnidade'),
-      somenteAtivos: document.getElementById('filtroSomenteAtivos'),
-      pageSize: document.getElementById('pageSizeSelect'),
+	      form: document.getElementById('formConsulta'),
+	      busca: document.getElementById('filtroBusca'),
+	      tipo: document.getElementById('filtroTipo'),
+	      origemBancos: document.getElementById('filtroOrigemBancos'),
+	      origemUnidade: document.getElementById('filtroOrigemUnidade'),
+	      somenteAtivos: document.getElementById('filtroSomenteAtivos'),
+	      pageSize: document.getElementById('pageSizeSelect'),
       resultadoBody: document.getElementById('resultadoTabelaBody'),
       resultadoInfo: document.getElementById('resultadoInfo'),
       pagination: document.getElementById('paginationWrap'),
       syncLog: document.getElementById('syncLog'),
       btnLimpar: document.getElementById('btnLimparFiltros'),
-      btnSyncAll: document.getElementById('btnSincronizarTudo'),
-      btnSyncSelected: document.getElementById('btnSincronizarSelecionadas'),
-      btnRefresh: document.getElementById('btnAtualizarPainel'),
-      statTotalRegistros: document.getElementById('statTotalRegistros'),
-      statTotalBases: document.getElementById('statTotalBases'),
-      statTotalTitulares: document.getElementById('statTotalTitulares'),
-      statTotalDependentes: document.getElementById('statTotalDependentes')
+	      btnSyncAll: document.getElementById('btnSincronizarTudo'),
+	      btnSyncSelected: document.getElementById('btnSincronizarSelecionadas'),
+	      btnRefresh: document.getElementById('btnAtualizarPainel'),
+	      btnDownload: document.getElementById('btnBaixarCsv'),
+	      btnSelecionarBancos: document.getElementById('btnSelecionarBancos'),
+	      btnLimparBancos: document.getElementById('btnLimparBancos'),
+	      statTotalRegistros: document.getElementById('statTotalRegistros'),
+	      statTotalBases: document.getElementById('statTotalBases'),
+	      statTotalTitulares: document.getElementById('statTotalTitulares'),
+      statTotalDependentes: document.getElementById('statTotalDependentes'),
+      statUltimaSync: document.getElementById('statUltimaSync'),
+      btnConsultar: document.getElementById('btnConsultarAgora')
     };
 
     function escapeHtml(value) {
@@ -596,17 +688,53 @@
       return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: String(value).length > 10 ? 'short' : undefined }).format(date);
     }
 
+    function formatPhone(value) {
+      const digits = String(value || '').replace(/\D+/g, '');
+      if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+      if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+	      return value ? escapeHtml(value) : '-';
+	    }
+
+	    function bancosSelecionados() {
+	      return Array.from(document.querySelectorAll('input[name="origem_bancos[]"]:checked')).map((el) => el.value);
+	    }
+
+	    function setConsultButtonLoading(isLoading) {
+	      if (!els.btnConsultar) return;
+      els.btnConsultar.disabled = isLoading;
+      els.btnConsultar.innerHTML = isLoading
+        ? '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Consultando...'
+        : '<i class="bi bi-search"></i> Consultar agora';
+    }
+
     function currentFilters() {
       return {
-        page: state.page,
-        pageSize: state.pageSize,
-        busca: els.busca.value.trim(),
-        tipo: els.tipo.value,
-        origem_banco: els.origemBanco.value,
-        origem_unidade: els.origemUnidade.value,
-        somente_ativos: els.somenteAtivos.value
-      };
-    }
+	        page: state.page,
+	        pageSize: state.pageSize,
+	        busca: els.busca.value.trim(),
+	        tipo: els.tipo.value,
+	        origem_bancos: bancosSelecionados(),
+	        origem_unidade: els.origemUnidade.value,
+	        somente_ativos: els.somenteAtivos.value
+	      };
+	    }
+
+	    function buildQuery(filters, includePagination) {
+	      const qs = new URLSearchParams();
+	      Object.entries(filters).forEach(([key, value]) => {
+	        if (!includePagination && (key === 'page' || key === 'pageSize')) return;
+	        if (Array.isArray(value)) {
+	          value.forEach((item) => {
+	            if (item !== '') qs.append(key + '[]', item);
+	          });
+	          return;
+	        }
+	        if (value !== undefined && value !== null && value !== '') {
+	          qs.set(key, value);
+	        }
+	      });
+	      return qs;
+	    }
 
     async function fetchJson(url, options) {
       const response = await fetch(url, options || {});
@@ -627,23 +755,44 @@
       return payload;
     }
 
-    function renderRows(items) {
-      if (!Array.isArray(items) || items.length === 0) {
-        els.resultadoBody.innerHTML = '<tr><td colspan="6"><div class="empty-state">Nenhum registro encontrado para os filtros informados.</div></td></tr>';
-        return;
-      }
-      els.resultadoBody.innerHTML = items.map((item) => {
-        const tipoClass = item.tipo_cadastro === 'DEPENDENTE' ? 'dependente' : 'titular';
-        const statusVinculo = item.tipo_cadastro === 'DEPENDENTE' ? (item.parentesco || '-') : (item.status_cliente || '-');
-        return `
-          <tr>
-            <td>
-              <div class="name-cell">${escapeHtml(item.nome || '-')}</div>
-              <div class="muted-line">ID origem: ${escapeHtml(item.origem_id || '-')}</div>
-            </td>
+	    function renderRows(items) {
+	      if (!Array.isArray(items) || items.length === 0) {
+	        els.resultadoBody.innerHTML = '<tr><td colspan="7"><div class="empty-state">Nenhum registro encontrado para os filtros informados.</div></td></tr>';
+	        return;
+	      }
+	      const dependentCounts = {};
+	      items.forEach((item) => {
+	        if (item.tipo_cadastro !== 'DEPENDENTE' || !item.origem_titular_id) return;
+	        const key = `${item.origem_banco || ''}:${item.origem_titular_id}`;
+	        dependentCounts[key] = (dependentCounts[key] || 0) + 1;
+	      });
+	      els.resultadoBody.innerHTML = items.map((item) => {
+	        const tipoClass = item.tipo_cadastro === 'DEPENDENTE' ? 'dependente' : 'titular';
+	        const statusVinculo = item.tipo_cadastro === 'DEPENDENTE' ? (item.parentesco || '-') : (item.status_cliente || '-');
+	        const groupKey = `${item.origem_banco || ''}:${item.origem_id}`;
+	        const dependentes = item.tipo_cadastro === 'TITULAR' ? (dependentCounts[groupKey] || 0) : 0;
+	        const rowClass = item.tipo_cadastro === 'DEPENDENTE' ? 'dependent-row' : 'titular-row';
+	        const marker = item.tipo_cadastro === 'DEPENDENTE'
+	          ? '<div class="dependent-marker"><i class="bi bi-arrow-return-right"></i> Dependente do titular ID ' + escapeHtml(item.origem_titular_id || '-') + '</div>'
+	          : '';
+	        const countLine = item.tipo_cadastro === 'TITULAR' && dependentes > 0
+	          ? `<div class="muted-line">${dependentes} dependente(s) nesta página</div>`
+	          : '';
+	        return `
+	          <tr class="${rowClass}">
+	            <td>
+	              ${marker}
+	              <div class="name-cell">${escapeHtml(item.nome || '-')}</div>
+	              <div class="muted-line">ID origem: ${escapeHtml(item.origem_id || '-')}</div>
+	              ${countLine}
+	            </td>
             <td>
               <div><strong>CPF:</strong> ${escapeHtml(item.cpf || '-')}</div>
               <div class="muted-line"><strong>RG:</strong> ${escapeHtml(item.rg || '-')}</div>
+            </td>
+            <td>
+              <div><strong>Telefone:</strong> ${formatPhone(item.telefone)}</div>
+              <div class="muted-line">${item.telefone ? 'Contato informado na origem' : 'Sem telefone cadastrado'}</div>
             </td>
             <td>
               <span class="chip ${tipoClass}">${escapeHtml(item.tipo_cadastro || '-')}</span>
@@ -684,11 +833,11 @@
       els.pagination.innerHTML = html;
     }
 
-    async function carregarResultados() {
-      els.resultadoInfo.textContent = 'Consultando registros centralizados...';
-      els.resultadoBody.innerHTML = '<tr><td colspan="6"><div class="empty-state">Carregando resultados...</div></td></tr>';
-      const qs = new URLSearchParams(currentFilters()).toString();
-      const payload = await fetchJson('/admin/api/consulta-unificada/lista?' + qs);
+	    async function carregarResultados() {
+	      els.resultadoInfo.textContent = 'Consultando registros centralizados...';
+	      els.resultadoBody.innerHTML = '<tr><td colspan="7"><div class="empty-state">Carregando resultados...</div></td></tr>';
+	      const qs = buildQuery(currentFilters(), true).toString();
+	      const payload = await fetchJson('/admin/api/consulta-unificada/lista?' + qs);
       const data = payload.data || {};
       state.total = data.total || 0;
       state.pages = data.pages || 1;
@@ -704,16 +853,26 @@
       els.statTotalBases.textContent = resumo.total_bases || 0;
       els.statTotalTitulares.textContent = resumo.total_titulares || 0;
       els.statTotalDependentes.textContent = resumo.total_dependentes || 0;
+      els.statUltimaSync.textContent = resumo.ultima_sync || '-';
     }
 
-    function baseIdsSelecionadas() {
-      return Array.from(document.querySelectorAll('input[name="base_ids[]"]:checked')).map((el) => el.value);
+	    function baseIdsSelecionadas() {
+	      return Array.from(document.querySelectorAll('input[name="base_ids[]"]:checked')).map((el) => el.value);
+	    }
+
+	    function baixarCsv() {
+	      const qs = buildQuery(currentFilters(), false).toString();
+	      window.location.href = '/admin/api/consulta-unificada/download' + (qs ? '?' + qs : '');
+	    }
+
+    function setSyncLog(message) {
+      if (els.syncLog) els.syncLog.textContent = message;
     }
 
     async function sincronizar(baseIds) {
       const body = new URLSearchParams();
       (baseIds || []).forEach((id) => body.append('base_ids[]', id));
-      els.syncLog.textContent = 'Sincronizando bases, aguarde...';
+      setSyncLog('Sincronizando bases, aguarde...');
       const payload = await fetchJson('/admin/api/consulta-unificada/sincronizar', {
         method: 'POST',
         headers: {
@@ -735,7 +894,7 @@
         linhas.push(`[${item.status}] ${item.nome_unidade} / ${item.nome_banco} => ${item.registros || 0} registro(s)`);
         if (item.mensagem) linhas.push(`  ${item.mensagem}`);
       });
-      els.syncLog.textContent = linhas.join('\n');
+      setSyncLog(linhas.join('\n'));
       await carregarPainel();
       await carregarResultados();
     }
@@ -743,9 +902,12 @@
     els.form.addEventListener('submit', async function (e) {
       e.preventDefault();
       state.page = 1;
+      setConsultButtonLoading(true);
       try { await carregarResultados(); } catch (error) {
-        els.resultadoBody.innerHTML = `<tr><td colspan="6"><div class="empty-state">${escapeHtml(error.message)}</div></td></tr>`;
+        els.resultadoBody.innerHTML = `<tr><td colspan="7"><div class="empty-state">${escapeHtml(error.message)}</div></td></tr>`;
         els.resultadoInfo.textContent = 'Falha na consulta.';
+      } finally {
+        setConsultButtonLoading(false);
       }
     });
     els.pageSize.addEventListener('change', async function () {
@@ -759,24 +921,42 @@
       state.page = parseInt(btn.getAttribute('data-page'), 10) || 1;
       try { await carregarResultados(); } catch (error) { }
     });
-    els.btnLimpar.addEventListener('click', function () {
-      els.form.reset();
-      state.page = 1;
-      state.pageSize = parseInt(els.pageSize.value, 10) || 25;
-    });
-    els.btnSyncAll.addEventListener('click', async function () {
-      try { await sincronizar([]); } catch (error) { els.syncLog.textContent = error.message; }
-    });
-    els.btnSyncSelected.addEventListener('click', async function () {
-      const ids = baseIdsSelecionadas();
-      if (ids.length === 0) {
-        els.syncLog.textContent = 'Selecione ao menos uma base antes de sincronizar.';
-        return;
-      }
-      try { await sincronizar(ids); } catch (error) { els.syncLog.textContent = error.message; }
-    });
+	    els.btnLimpar.addEventListener('click', function () {
+	      els.form.reset();
+	      document.querySelectorAll('input[name="origem_bancos[]"]').forEach((el) => { el.checked = false; });
+	      state.page = 1;
+	      state.pageSize = parseInt(els.pageSize.value, 10) || 25;
+	    });
+	    if (els.btnSelecionarBancos) {
+	      els.btnSelecionarBancos.addEventListener('click', function () {
+	        document.querySelectorAll('input[name="origem_bancos[]"]').forEach((el) => { el.checked = true; });
+	      });
+	    }
+	    if (els.btnLimparBancos) {
+	      els.btnLimparBancos.addEventListener('click', function () {
+	        document.querySelectorAll('input[name="origem_bancos[]"]').forEach((el) => { el.checked = false; });
+	      });
+	    }
+	    if (els.btnDownload) {
+	      els.btnDownload.addEventListener('click', baixarCsv);
+	    }
+    if (els.btnSyncAll) {
+      els.btnSyncAll.addEventListener('click', async function () {
+        try { await sincronizar([]); } catch (error) { setSyncLog(error.message); }
+      });
+    }
+    if (els.btnSyncSelected) {
+      els.btnSyncSelected.addEventListener('click', async function () {
+        const ids = baseIdsSelecionadas();
+        if (ids.length === 0) {
+          setSyncLog('Selecione ao menos uma base antes de sincronizar.');
+          return;
+        }
+        try { await sincronizar(ids); } catch (error) { setSyncLog(error.message); }
+      });
+    }
     els.btnRefresh.addEventListener('click', async function () {
-      try { await carregarPainel(); } catch (error) { els.syncLog.textContent = error.message; }
+      try { await carregarPainel(); } catch (error) { setSyncLog(error.message); }
     });
     carregarResultados().catch(() => { });
   })();

@@ -23,7 +23,13 @@
             <div class="card-body">
               <div class="mb-3">
                 <label for="pcVersion" class="form-label">Nova versão</label>
-                <input type="text" class="form-control" id="pcVersion" placeholder="1.0.4" autocomplete="off">
+                <div class="input-group">
+                  <input type="text" class="form-control" id="pcVersion" value="{$suggestedVersion}" placeholder="1.053" autocomplete="off">
+                  <button class="btn btn-outline-secondary" type="button" id="pcSuggestVersion" title="Recalcular próxima versão">
+                    <i class="bi bi-arrow-clockwise"></i>
+                  </button>
+                </div>
+                <div class="form-text">Sugestão automática baseada na última versão publicada. Revise antes de publicar.</div>
               </div>
               <div class="mb-3">
                 <label for="pcChangelog" class="form-label">Changelog</label>
@@ -44,6 +50,41 @@
           </div>
 
           <div class="alert mt-3 d-none" id="pcStatus"></div>
+
+          <div class="card mt-3" id="pcSourceSyncCard">
+            <div class="card-header d-flex align-items-center justify-content-between">
+              <h3 class="card-title mb-0">Sincronização da fonte</h3>
+              <span class="badge bg-light text-dark" id="pcSourceSyncBadge">verificando</span>
+            </div>
+            <div class="card-body">
+              <div id="pcSourceSyncRows" class="pc-source-sync text-muted">Carregando status da fonte...</div>
+              <div class="d-flex flex-wrap gap-2 mt-3">
+                <button type="button" class="btn btn-outline-primary btn-sm" id="pcSourceSyncRefresh">
+                  <i class="bi bi-arrow-clockwise"></i> Validar fonte
+                </button>
+                <button type="button" class="btn btn-outline-success btn-sm" id="pcSourceSyncSnapshot">
+                  <i class="bi bi-shield-check"></i> Registrar sincronização
+                </button>
+              </div>
+              <div class="input-group input-group-sm mt-3">
+                <input type="file" class="form-control" id="pcSourceUploadZip" accept=".zip">
+                <button class="btn btn-outline-secondary" type="button" id="pcSourceUpload">
+                  <i class="bi bi-upload"></i> Enviar fonte
+                </button>
+              </div>
+              <div class="form-text">O ZIP enviado deve conter caminhos relativos da raiz do prato_web.</div>
+              <div class="mt-3 d-none" id="pcSourceDiffBox"></div>
+            </div>
+          </div>
+
+          <div class="card mt-3 d-none" id="pcSourceAuditCard">
+            <div class="card-header">
+              <h3 class="card-title mb-0">Fonte do pacote</h3>
+            </div>
+            <div class="card-body">
+              <div id="pcSourceAuditRows" class="pc-source-audit"></div>
+            </div>
+          </div>
 
           <div class="card mt-3 d-none" id="pcChecklistCard">
             <div class="card-header">
@@ -72,6 +113,10 @@
                     <tr>
                       <th>Status</th>
                       <th>Arquivo</th>
+                      <th>Tamanho</th>
+                      <th>Hash atual</th>
+                      <th>Modificado em</th>
+                      <th>ZIP</th>
                     </tr>
                   </thead>
                   <tbody id="pcIncludedRows">
@@ -94,6 +139,9 @@
                     <tr>
                       <th>Motivo</th>
                       <th>Arquivo</th>
+                      <th>Status</th>
+                      <th>Tamanho</th>
+                      <th>Hash atual</th>
                     </tr>
                   </thead>
                   <tbody id="pcIgnoredRows">
@@ -197,6 +245,26 @@
     font-size: 13px;
     color: #6b7280;
   }
+
+  .pc-source-audit {
+    display: grid;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .pc-source-audit code {
+    overflow-wrap: anywhere;
+  }
+
+  .pc-source-sync {
+    display: grid;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .pc-source-sync code {
+    overflow-wrap: anywhere;
+  }
 </style>
 
 <script>
@@ -207,6 +275,14 @@
       test: document.getElementById('pcTestConnection'),
       preview: document.getElementById('pcPreview'),
       publish: document.getElementById('pcPublish'),
+      suggestVersion: document.getElementById('pcSuggestVersion'),
+      sourceSyncRefresh: document.getElementById('pcSourceSyncRefresh'),
+      sourceSyncSnapshot: document.getElementById('pcSourceSyncSnapshot'),
+      sourceUploadZip: document.getElementById('pcSourceUploadZip'),
+      sourceUpload: document.getElementById('pcSourceUpload'),
+      sourceDiffBox: document.getElementById('pcSourceDiffBox'),
+      sourceSyncBadge: document.getElementById('pcSourceSyncBadge'),
+      sourceSyncRows: document.getElementById('pcSourceSyncRows'),
       status: document.getElementById('pcStatus'),
       includedRows: document.getElementById('pcIncludedRows'),
       ignoredRows: document.getElementById('pcIgnoredRows'),
@@ -217,10 +293,13 @@
       checklistCard: document.getElementById('pcChecklistCard'),
       checklistRows: document.getElementById('pcChecklistRows'),
       blockedBox: document.getElementById('pcBlockedBox'),
-      blockedRows: document.getElementById('pcBlockedRows')
+      blockedRows: document.getElementById('pcBlockedRows'),
+      sourceAuditCard: document.getElementById('pcSourceAuditCard'),
+      sourceAuditRows: document.getElementById('pcSourceAuditRows')
     };
 
     let previewLoaded = false;
+    let sourceSynced = false;
 
     function esc(value) {
       return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
@@ -229,7 +308,7 @@
     }
 
     function setBusy(busy) {
-      [els.test, els.preview, els.publish].forEach(function (btn) { btn.disabled = busy; });
+      [els.test, els.preview, els.publish, els.suggestVersion, els.sourceSyncRefresh, els.sourceSyncSnapshot, els.sourceUpload].forEach(function (btn) { if (btn) btn.disabled = busy; });
     }
 
     function showStatus(type, message) {
@@ -240,12 +319,30 @@
 
     function renderRows(target, rows, ignored) {
       if (!rows || rows.length === 0) {
-        target.innerHTML = '<tr><td colspan="2" class="text-muted text-center py-4">Nenhum arquivo.</td></tr>';
+        target.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-4">Nenhum arquivo.</td></tr>';
         return;
       }
       target.innerHTML = rows.map(function (item) {
         const first = ignored ? (item.reason || '-') : (item.status || '-');
-        return '<tr><td><span class="badge bg-light text-dark">' + esc(first) + '</span></td><td><code>' + esc(item.path) + '</code></td></tr>';
+        const hash = item.sha256 ? String(item.sha256).slice(0, 16) : '-';
+        const zip = item.include ? 'incluído' : 'não';
+        if (ignored) {
+          return '<tr>' +
+            '<td><span class="badge bg-light text-dark">' + esc(first) + '</span></td>' +
+            '<td><code>' + esc(item.path) + '</code></td>' +
+            '<td>' + esc(item.status_type || item.status || '-') + '</td>' +
+            '<td>' + esc(item.size_human || formatBytes(item.size || 0)) + '</td>' +
+            '<td><code>' + esc(hash) + '</code></td>' +
+          '</tr>';
+        }
+        return '<tr>' +
+          '<td><span class="badge bg-light text-dark">' + esc(first) + '</span></td>' +
+          '<td><code>' + esc(item.path) + '</code></td>' +
+          '<td>' + esc(item.size_human || formatBytes(item.size || 0)) + '</td>' +
+          '<td><code>' + esc(hash) + '</code></td>' +
+          '<td>' + esc(item.mtime || '-') + '</td>' +
+          '<td>' + esc(zip) + '</td>' +
+        '</tr>';
       }).join('');
     }
 
@@ -256,8 +353,72 @@
       els.ignoredCount.textContent = ignored.length;
       renderRows(els.includedRows, included, false);
       renderRows(els.ignoredRows, ignored, true);
+      renderSourceAudit(data.source_audit || {});
       renderPreflight(data.preflight || {});
       previewLoaded = true;
+    }
+
+    function renderSourceSync(data) {
+      sourceSynced = !!data.synced;
+      if (els.sourceSyncBadge) {
+        els.sourceSyncBadge.className = 'badge ' + (sourceSynced ? 'bg-success' : 'bg-warning text-dark');
+        els.sourceSyncBadge.textContent = sourceSynced ? 'sincronizada' : 'pendente';
+      }
+
+      const latest = data.latest_sync || {};
+      const validation = data.validation || {};
+      const git = data.git || {};
+      const history = data.history || [];
+      const pending = []
+        .concat(validation.missing || [])
+        .concat(validation.forbidden || []);
+      const historyRows = history.slice(0, 3).map(function (item) {
+        return '<div><code>' + esc(item.sync_id || '-') + '</code><br><span class="text-muted">' +
+          esc(item.created_at || '-') + ' - ' + esc(item.total_files || 0) + ' arquivos</span><br>' +
+          '<button type="button" class="btn btn-outline-secondary btn-sm pcSourceDiff mt-1 me-1" data-sync-id="' + esc(item.sync_id || '') + '">Comparar</button>' +
+          '<button type="button" class="btn btn-outline-warning btn-sm pcSourceRollbackPreview mt-1 me-1" data-sync-id="' + esc(item.sync_id || '') + '">Prévia rollback</button>' +
+          '<button type="button" class="btn btn-outline-danger btn-sm pcSourceRollback mt-1" data-sync-id="' + esc(item.sync_id || '') + '">Rollback</button></div>';
+      }).join('');
+
+      els.sourceSyncRows.innerHTML =
+        '<div><strong>Pasta oficial:</strong> <code>' + esc(data.source_root || '-') + '</code></div>' +
+        '<div><strong>Fingerprint atual:</strong> <code>' + esc((data.fingerprint || '').slice(0, 24) || '-') + '</code></div>' +
+        '<div><strong>Arquivos rastreados:</strong> ' + esc(data.total_files || 0) + ' (' + esc(data.total_bytes_human || '-') + ')</div>' +
+        '<div><strong>Git:</strong> ' + esc(git.branch || '-') + ' / <code>' + esc((git.head || '').slice(0, 12) || '-') + '</code></div>' +
+        '<div><strong>Última sincronização:</strong> ' + (latest.sync_id ? ('<code>' + esc(latest.sync_id) + '</code><br><span class="text-muted">' + esc(latest.created_at || '-') + '</span>') : 'nenhuma') + '</div>' +
+        (pending.length ? '<div class="text-danger"><strong>Pendências:</strong> ' + esc(pending.join(', ')) + '</div>' : '<div class="text-success"><strong>Validação:</strong> fonte sem pendências obrigatórias.</div>') +
+        (historyRows ? '<div><strong>Histórico recente:</strong></div>' + historyRows : '');
+    }
+
+    function renderSourceDiff(data, title) {
+      if (!els.sourceDiffBox) return;
+      const totals = data.totals || {};
+      const sample = []
+        .concat((data.added || []).slice(0, 5).map(function (f) { return '+ ' + (f.path || ''); }))
+        .concat((data.modified || []).slice(0, 5).map(function (f) { return '~ ' + (f.path || ''); }))
+        .concat((data.removed || []).slice(0, 5).map(function (f) { return '- ' + (f.path || ''); }));
+      els.sourceDiffBox.className = 'mt-3 alert alert-info';
+      els.sourceDiffBox.innerHTML =
+        '<div><strong>' + esc(title || 'Comparação') + '</strong></div>' +
+        '<div>Novos: ' + esc(totals.added || 0) + ' | Alterados: ' + esc(totals.modified || 0) + ' | Removidos: ' + esc(totals.removed || 0) + '</div>' +
+        (sample.length ? '<pre class="mb-0 mt-2">' + esc(sample.join('\\n')) + '</pre>' : '<div class="text-muted mt-2">Sem diferenças.</div>');
+      els.sourceDiffBox.classList.remove('d-none');
+    }
+
+    function renderSourceAudit(audit) {
+      if (!els.sourceAuditCard || !els.sourceAuditRows) return;
+      els.sourceAuditCard.classList.remove('d-none');
+      const files = audit.files || [];
+      const fileRows = files.map(function (file) {
+        return '<div><code>' + esc(file.path || '-') + '</code><br><span class="text-muted">' +
+          (file.exists ? ('sha ' + esc((file.sha256 || '').slice(0, 12)) + ' - ' + esc(file.mtime || '-')) : 'ausente') +
+          '</span></div>';
+      }).join('');
+      els.sourceAuditRows.innerHTML =
+        '<div><strong>Pasta:</strong> <code>' + esc(audit.root || '-') + '</code></div>' +
+        '<div><strong>Git:</strong> ' + esc(audit.git_branch || '-') + ' / <code>' + esc((audit.git_head || '').slice(0, 12) || '-') + '</code></div>' +
+        '<div><strong>Arquivos alterados no Git:</strong> ' + esc(audit.git_status_count || 0) + '</div>' +
+        fileRows;
     }
 
     function renderPreflight(preflight) {
@@ -297,6 +458,8 @@
 
     function renderSummary(data) {
       els.summaryCard.classList.remove('d-none');
+      const manifest = data.manifest || {};
+      const signature = data.signature || {};
       els.summary.innerHTML =
         summaryItem('Versão publicada', data.version || '-') +
         summaryItem('Arquivos incluídos', (data.included || []).length) +
@@ -306,7 +469,14 @@
         summaryItem('Upload ZIP', data.upload && data.upload.success ? 'sucesso' : 'pendente') +
         summaryItem('JSON local', data.json_status && data.json_status.local ? 'atualizado' : 'pendente') +
         summaryItem('JSON nuvem', data.json_status && data.json_status.remote ? 'enviado' : 'pendente') +
-        summaryItem('Checksum', data.sha256 || '-');
+        summaryItem('Checksum', data.sha256 || '-') +
+        summaryItem('Manifesto', manifest.url || manifest.path || '-') +
+        summaryItem('Assinatura', signature.enabled ? (signature.algorithm || 'RSA-SHA256') : 'desativada') +
+        '<div class="col-12 d-flex flex-wrap gap-2">' +
+          (data.url ? '<a class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener" href="' + esc(data.url) + '"><i class="bi bi-download"></i> Baixar pacote</a>' : '') +
+          (manifest.url ? '<a class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener" href="' + esc(manifest.url) + '"><i class="bi bi-file-earmark-text"></i> Ver manifesto</a>' : '') +
+          (signature.signature_url ? '<a class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener" href="' + esc(signature.signature_url) + '"><i class="bi bi-shield-lock"></i> Baixar assinatura</a>' : '') +
+        '</div>';
     }
 
     async function requestJson(url, options) {
@@ -318,6 +488,136 @@
         throw new Error(json.message || 'Operação não concluída.');
       }
       return json;
+    }
+
+    async function loadSourceSync(showMessage) {
+      setBusy(true);
+      try {
+        const data = await requestJson('/admin/api/source-sync/status', { credentials: 'same-origin' });
+        renderSourceSync(data);
+        if (showMessage) {
+          showStatus(data.synced ? 'success' : 'warning', data.synced ? 'Fonte sincronizada e pronta para publicação.' : 'Fonte validada, mas precisa registrar sincronização antes de publicar.');
+        }
+      } catch (err) {
+        if (els.sourceSyncBadge) {
+          els.sourceSyncBadge.className = 'badge bg-danger';
+          els.sourceSyncBadge.textContent = 'erro';
+        }
+        showStatus('danger', err.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function registerSourceSync() {
+      const notes = window.prompt('Observação da sincronização da fonte:', 'Fonte validada para próxima publicação') || '';
+      setBusy(true);
+      try {
+        const data = await requestJson('/admin/api/source-sync/snapshot', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notes: notes })
+        });
+        showStatus('success', data.message || 'Fonte sincronizada.');
+        await loadSourceSync(false);
+      } catch (err) {
+        showStatus('danger', err.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function uploadSourceZip() {
+      const file = els.sourceUploadZip && els.sourceUploadZip.files ? els.sourceUploadZip.files[0] : null;
+      if (!file) {
+        showStatus('warning', 'Selecione o ZIP da fonte antes de enviar.');
+        return;
+      }
+      if (!confirm('Enviar este ZIP como nova fonte oficial do prato_web?')) return;
+      const form = new FormData();
+      form.append('source_zip', file);
+      form.append('notes', 'Fonte enviada pela tela de publicação');
+      setBusy(true);
+      try {
+        const data = await requestJson('/admin/api/source-sync/upload', {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: form
+        });
+        showStatus('success', data.message || 'Fonte enviada com sucesso.');
+        previewLoaded = false;
+        await loadSourceSync(false);
+      } catch (err) {
+        showStatus('danger', err.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    if (els.sourceSyncRefresh) {
+      els.sourceSyncRefresh.addEventListener('click', function () { loadSourceSync(true); });
+    }
+
+    if (els.sourceSyncSnapshot) {
+      els.sourceSyncSnapshot.addEventListener('click', registerSourceSync);
+    }
+
+    if (els.sourceUpload) {
+      els.sourceUpload.addEventListener('click', uploadSourceZip);
+    }
+
+    if (els.sourceSyncRows) {
+      els.sourceSyncRows.addEventListener('click', async function (event) {
+        const diffBtn = event.target.closest('.pcSourceDiff');
+        const previewBtn = event.target.closest('.pcSourceRollbackPreview');
+        const btn = event.target.closest('.pcSourceRollback');
+        if (diffBtn) {
+          const syncId = diffBtn.getAttribute('data-sync-id') || '';
+          setBusy(true);
+          try {
+            const data = await requestJson('/admin/api/source-sync/diff?from=' + encodeURIComponent(syncId) + '&to=current', { credentials: 'same-origin' });
+            renderSourceDiff(data, 'Comparação com a fonte atual');
+          } catch (err) {
+            showStatus('danger', err.message);
+          } finally {
+            setBusy(false);
+          }
+          return;
+        }
+        if (previewBtn) {
+          const syncId = previewBtn.getAttribute('data-sync-id') || '';
+          setBusy(true);
+          try {
+            const data = await requestJson('/admin/api/source-sync/rollback-preview?sync_id=' + encodeURIComponent(syncId), { credentials: 'same-origin' });
+            renderSourceDiff(data, 'Prévia de rollback');
+          } catch (err) {
+            showStatus('danger', err.message);
+          } finally {
+            setBusy(false);
+          }
+          return;
+        }
+        if (!btn) return;
+        const syncId = btn.getAttribute('data-sync-id') || '';
+        if (!syncId || !confirm('Restaurar a fonte para a sincronização ' + syncId + '?')) return;
+        setBusy(true);
+        try {
+          const data = await requestJson('/admin/api/source-sync/rollback', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sync_id: syncId })
+          });
+          showStatus('success', data.message || 'Rollback concluído.');
+          previewLoaded = false;
+          await loadSourceSync(false);
+        } catch (err) {
+          showStatus('danger', err.message);
+        } finally {
+          setBusy(false);
+        }
+      });
     }
 
     els.test.addEventListener('click', async function () {
@@ -346,9 +646,28 @@
       }
     });
 
+    if (els.suggestVersion) {
+      els.suggestVersion.addEventListener('click', async function () {
+        setBusy(true);
+        try {
+          const json = await requestJson('/admin/api/update-publish/suggest-version', { credentials: 'same-origin' });
+          els.version.value = json.suggested_version || els.version.value;
+          showStatus('info', 'Próxima versão sugerida: ' + els.version.value + '.');
+        } catch (err) {
+          showStatus('danger', err.message);
+        } finally {
+          setBusy(false);
+        }
+      });
+    }
+
     els.publish.addEventListener('click', async function () {
       if (!previewLoaded) {
         showStatus('warning', 'Visualize os arquivos antes de publicar.');
+        return;
+      }
+      if (!sourceSynced) {
+        showStatus('warning', 'Registre a sincronização da fonte antes de publicar.');
         return;
       }
       if (!els.version.value.trim() || !els.changelog.value.trim()) {
@@ -375,5 +694,7 @@
         setBusy(false);
       }
     });
+
+    loadSourceSync(false);
   })();
 </script>

@@ -15,6 +15,7 @@
       </section>
 
       <form class="needs-validation" action="/admin/funcionarios/create" method="post" novalidate>
+        <input type="hidden" name="_csrf" value="{$csrf_token}">
         <div class="card">
           <div class="card-header">
             <h3 class="card-title mb-0"><i class="fa-solid fa-address-card me-2 text-primary"></i>Dados do usuário</h3>
@@ -58,7 +59,7 @@
                 <label for="senha" class="form-label fw-semibold">Senha</label>
                 <div class="input-group">
                   <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
-                  <input type="password" class="form-control" id="senha" name="senha" placeholder="Digite a senha" required>
+                  <input type="password" class="form-control" id="senha" name="senha" placeholder="Mínimo de 8 caracteres, letras e números" minlength="8" autocomplete="new-password" required>
                 </div>
                 <div class="invalid-feedback">Informe a senha.</div>
               </div>
@@ -71,9 +72,25 @@
                     <option value="ADMIN">Administrador</option>
                     <option value="SUPERVISOR">Supervisor</option>
                     <option value="ASSESSOR">Assessor</option>
+                    <option value="CONSULTA">Consulta</option>
                   </select>
                 </div>
                 <div class="invalid-feedback">Selecione o perfil.</div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <label class="form-label fw-semibold">Regiões permitidas</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fa-solid fa-map-location-dot"></i></span>
+                  <div class="form-control h-auto py-2">
+                    {loop="$regioes"}
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="regiao_ids[]" id="regiao_{$value.id_regiao}" value="{$value.id_regiao}">
+                      <label class="form-check-label" for="regiao_{$value.id_regiao}">{$value.nome}</label>
+                    </div>
+                    {/loop}
+                  </div>
+                </div>
+                <div class="form-text">Marque uma ou mais regiões para este perfil.</div>
               </div>
             </div>
           </div>

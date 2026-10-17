@@ -2,6 +2,41 @@
 
 use \Hcode\Model\Funcionarios;
 
+/**
+ * Token shared by authenticated HTML forms. API clients may send the same
+ * value in X-CSRF-Token when the request has no form body.
+ */
+function portal_csrf_token(): string
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return '';
+    }
+    if (!isset($_SESSION['portal_csrf_token']) || !is_string($_SESSION['portal_csrf_token']) || strlen($_SESSION['portal_csrf_token']) < 32) {
+        $_SESSION['portal_csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['portal_csrf_token'];
+}
+
+function portal_require_csrf(?array $input = null): void
+{
+    $expected = portal_csrf_token();
+    $received = is_array($input) ? ($input['_csrf'] ?? '') : '';
+    if (!is_string($received) || $received === '') {
+        $received = (string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    }
+
+    if ($expected === '' || $received === '' || !hash_equals($expected, $received)) {
+        http_response_code(403);
+        if (strpos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false || strpos((string)($_SERVER['REQUEST_URI'] ?? ''), '/api/') !== false) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'message' => 'Sessão de formulário inválida.'], JSON_UNESCAPED_UNICODE);
+        } else {
+            echo 'Sessão de formulário inválida. Recarregue a página e tente novamente.';
+        }
+        exit;
+    }
+}
+
 function formatPrice($vlprice)
 {
     // ✅ correção: precedência
@@ -12,7 +47,7 @@ function formatPrice($vlprice)
 
 function formatDate($date)
 {
-    return date('d/m/Y', strtotime($date));
+    return portal_format_manaus($date, 'd/m/Y');
 }
 
 function checkLogin($inadmin = true)
@@ -82,7 +117,7 @@ function podeRodarBackup(int $cooldownSegundos = 600): bool
 function backupLog(string $mensagem): void
 {
     $arquivo = backupLogFile();
-    $data = date('Y-m-d H:i:s');
+    $data = portal_utc_now();
     $linha = "{$data}|{$mensagem}\n";
     file_put_contents($arquivo, $linha, FILE_APPEND);
 }
@@ -141,8 +176,8 @@ function getBackupNotifications(int $limit = 10): array
 
         $items[] = [
             'msg'  => $msg,
-            'time' => date('H:i', strtotime($data)),
-            'date' => $data
+            'time' => portal_format_manaus($data, 'H:i'),
+            'date' => portal_format_manaus($data)
         ];
     }
 

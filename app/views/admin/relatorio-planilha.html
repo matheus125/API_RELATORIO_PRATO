@@ -181,7 +181,7 @@
 
   .planilha-form-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
     margin-bottom: 18px;
   }
@@ -613,6 +613,14 @@
                   <option value="0" {if="$filtros.somente_fechados == 0"}selected{/if}>Todos os registros</option>
                 </select>
               </div>
+              <div>
+                <label class="form-label" for="planilhaRegiao">Região</label>
+                <select id="planilhaRegiao" name="regiao" class="form-select">
+                  <option value="" {if="$filtros.regiao == ''"}selected{/if}>Capital e Interior</option>
+                  <option value="CAPITAL" {if="$filtros.regiao == 'CAPITAL'"}selected{/if}>Capital</option>
+                  <option value="INTERIOR" {if="$filtros.regiao == 'INTERIOR'"}selected{/if}>Interior</option>
+                </select>
+              </div>
             </div>
 
             <div class="planilha-tip">
@@ -642,7 +650,7 @@
           <ul class="rules-list">
             <li class="rules-item"><span class="icon-bullet"><i class="bi bi-calendar3"></i></span><div>A rotina usa a aba do mês selecionado e preenche automaticamente os dias nas colunas da planilha modelo.</div></li>
             <li class="rules-item"><span class="icon-bullet"><i class="bi bi-building"></i></span><div>A unidade é localizada pelo campo <strong>nome_banco</strong> e a data é identificada pelo campo <strong>data</strong>.</div></li>
-            <li class="rules-item"><span class="icon-bullet"><i class="bi bi-funnel"></i></span><div>O filtro permite exportar apenas registros fechados ou considerar todos os registros do período selecionado.</div></li>
+            <li class="rules-item"><span class="icon-bullet"><i class="bi bi-funnel"></i></span><div>Os filtros permitem exportar registros fechados ou todos os registros, separados por Capital ou Interior quando necessário.</div></li>
           </ul>
           <div class="planilha-alert-inline"><strong>Observação:</strong> a linha <strong>Novos cadastros</strong> continua sendo exportada com valor <strong>0</strong>, porque a tabela atual não possui essa coluna.</div>
           <strong class="d-block mt-3 text-dark">Modelo utilizado</strong>
@@ -711,6 +719,7 @@
     ano: document.getElementById('planilhaAno'),
     mes: document.getElementById('planilhaMes'),
     filtro: document.getElementById('planilhaFiltro'),
+    regiao: document.getElementById('planilhaRegiao'),
     btn: document.getElementById('btnGerarPlanilha'),
     btnText: document.getElementById('btnGerarPlanilhaText'),
     toastStack: document.getElementById('planilhaToastStack'),
@@ -761,7 +770,8 @@
     return {
       ano: Number(els.ano.value || 0),
       mes: Number(els.mes.value || 0),
-      somente_fechados: Number(els.filtro.value || 0)
+      somente_fechados: Number(els.filtro.value || 0),
+      regiao: els.regiao.value || ''
     };
   }
 
@@ -1021,7 +1031,7 @@
   if (els.form) {
     els.form.addEventListener('submit', gerarPlanilha);
   }
-  [els.ano, els.mes, els.filtro].forEach(el => {
+  [els.ano, els.mes, els.filtro, els.regiao].forEach(el => {
     if (el) el.addEventListener('change', scheduleRefresh);
   });
 

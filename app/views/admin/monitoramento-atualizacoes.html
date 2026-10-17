@@ -23,6 +23,7 @@
   .updates-table { min-width: 1680px; margin: 0; }
   .updates-table th { white-space: nowrap; color: #475569; font-size: .78rem; }
   .updates-table td { vertical-align: top; font-size: .84rem; }
+  .updates-units-section + .updates-units-section { margin-top: 18px; padding-top: 18px; border-top: 1px solid #e5e7eb; }
   .updates-muted { color: #64748b; }
   .updates-link { border: 0; background: transparent; color: #1d4ed8; padding: 0; font-weight: 700; text-align: left; }
   .updates-error-text { max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -92,6 +93,7 @@
       </form>
     </div>
 
+    {if="canAccess('UPDATE_MONITORING_MANAGE')"}
     <div class="updates-panel">
       <div class="updates-panel-head">
         <h2 class="updates-panel-title">Regra de unidade offline</h2>
@@ -103,6 +105,8 @@
         <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-save"></i> Salvar</button>
       </form>
     </div>
+
+    {/if}
 
     <div class="updates-chart-grid">
       <div class="updates-panel">
@@ -121,34 +125,75 @@
 
     <div class="updates-panel">
       <div class="updates-panel-head">
-        <h2 class="updates-panel-title">Unidades</h2>
+        <h2 class="updates-panel-title">Unidades atualizadas</h2>
         <span class="updates-muted" id="unitsCount"></span>
       </div>
-      <div class="updates-table-wrap">
-        <table class="table table-hover updates-table">
-          <thead>
-            <tr>
-              <th>Unidade</th>
-              <th>Município</th>
-              <th>Tipo</th>
-              <th>Sistema</th>
-              <th>Versão instalada</th>
-              <th>Versão disponível</th>
-              <th>Status</th>
-              <th>Status banco</th>
-              <th>Etapa</th>
-              <th>Mensagem</th>
-              <th>Última comunicação</th>
-              <th>Último download</th>
-              <th>Última instalação</th>
-              <th>Data/hora local</th>
-              <th>IP</th>
-              <th>Tempo instalação</th>
-              <th>Arquivos ausentes</th>
-            </tr>
-          </thead>
-          <tbody id="unitsTable"></tbody>
-        </table>
+      <div id="unitsTables">
+        <div class="updates-units-section">
+          <div class="updates-panel-head">
+            <h3 class="updates-panel-title">Já atualizadas</h3>
+            <span class="updates-muted" id="updatedUnitsCount"></span>
+          </div>
+          <div class="updates-table-wrap">
+            <table class="table table-hover updates-table">
+              <thead>
+                <tr>
+                  <th>Unidade</th>
+                  <th>Município</th>
+                  <th>Tipo</th>
+                  <th>Sistema</th>
+                  <th>Versão instalada</th>
+                  <th>Versão disponível</th>
+                  <th>Status</th>
+                  <th>Status banco</th>
+                  <th>Etapa</th>
+                  <th>Mensagem</th>
+                  <th>Última comunicação</th>
+                  <th>Último download</th>
+                  <th>Última instalação</th>
+                  <th>Data/hora local</th>
+                  <th>IP</th>
+                  <th>Tempo instalação</th>
+                  <th>Arquivos ausentes</th>
+                </tr>
+              </thead>
+              <tbody id="updatedUnitsTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="updates-units-section">
+          <div class="updates-panel-head">
+            <h3 class="updates-panel-title">Não atualizadas</h3>
+            <span class="updates-muted" id="pendingUnitsCount"></span>
+          </div>
+          <div class="updates-table-wrap">
+            <table class="table table-hover updates-table">
+              <thead>
+                <tr>
+                  <th>Unidade</th>
+                  <th>Município</th>
+                  <th>Tipo</th>
+                  <th>Sistema</th>
+                  <th>Versão instalada</th>
+                  <th>Versão disponível</th>
+                  <th>Status</th>
+                  <th>Status banco</th>
+                  <th>Etapa</th>
+                  <th>Mensagem</th>
+                  <th>Última comunicação</th>
+                  <th>Último download</th>
+                  <th>Última instalação</th>
+                  <th>Data/hora local</th>
+                  <th>IP</th>
+                  <th>Tempo instalação</th>
+                  <th>Arquivos ausentes</th>
+                </tr>
+              </thead>
+              <tbody id="pendingUnitsTable"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -209,6 +254,7 @@
 
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
   const statusClass = (item) => `updates-status updates-status-${esc(item.status_class || 'warning')}`;
+  const isUpdatedUnit = (item) => item.instalou === true || String(item.status_calculado || '').toLowerCase() === 'instalou';
 
   function fillSelect(id, values) {
     const el = document.getElementById(id);
@@ -243,17 +289,16 @@
         <small>${esc(detail)}</small>
       </div>
     `).join('');
-    document.getElementById('offlineThreshold').value = state.dashboard.threshold_minutes || 60;
+    const offlineThreshold = document.getElementById('offlineThreshold');
+    if (offlineThreshold) offlineThreshold.value = state.dashboard.threshold_minutes || 60;
   }
 
-  function renderUnits() {
-    document.getElementById('unitsCount').textContent = `${state.units.length} unidade(s)`;
-    const tbody = document.getElementById('unitsTable');
-    if (!state.units.length) {
-      tbody.innerHTML = '<tr><td colspan="17"><div class="updates-empty">Nenhuma unidade encontrada para os filtros atuais.</div></td></tr>';
-      return;
+  function renderUnitRows(items, emptyMessage) {
+    if (!items.length) {
+      return `<tr><td colspan="17"><div class="updates-empty">${esc(emptyMessage)}</div></td></tr>`;
     }
-    tbody.innerHTML = state.units.map((item) => `
+
+    return items.map((item) => `
       <tr>
         <td><button class="updates-link" type="button" data-unit="${esc(item.unidade_id)}" data-system="${esc(item.sistema)}">${esc(item.nome_unidade)}</button><br><span class="updates-muted">${esc(item.unidade_id)}</span></td>
         <td>${esc(item.municipio)}</td>
@@ -274,6 +319,16 @@
         <td><div class="updates-error-text" title="${esc(item.arquivos_ausentes)}">${esc(item.arquivos_ausentes || '-')}</div></td>
       </tr>
     `).join('');
+  }
+
+  function renderUnits() {
+    const updatedUnits = state.units.filter(isUpdatedUnit);
+    const pendingUnits = state.units.filter((item) => !isUpdatedUnit(item));
+    document.getElementById('unitsCount').textContent = `${state.units.length} unidade(s)`;
+    document.getElementById('updatedUnitsCount').textContent = `${updatedUnits.length} unidade(s)`;
+    document.getElementById('pendingUnitsCount').textContent = `${pendingUnits.length} unidade(s)`;
+    document.getElementById('updatedUnitsTable').innerHTML = renderUnitRows(updatedUnits, 'Nenhuma unidade atualizada encontrada para os filtros atuais.');
+    document.getElementById('pendingUnitsTable').innerHTML = renderUnitRows(pendingUnits, 'Nenhuma unidade pendente encontrada para os filtros atuais.');
   }
 
   function renderLogs() {
@@ -425,9 +480,10 @@
   document.getElementById('btnRefreshUpdates').addEventListener('click', () => refresh().catch((err) => { document.getElementById('filterMessage').textContent = err.message; }));
   document.getElementById('updatesFilters').addEventListener('submit', (ev) => { ev.preventDefault(); refresh().catch((err) => { document.getElementById('filterMessage').textContent = err.message; }); });
   document.getElementById('btnClearFilters').addEventListener('click', () => { document.getElementById('updatesFilters').reset(); refresh().catch((err) => { document.getElementById('filterMessage').textContent = err.message; }); });
-  document.getElementById('offlineConfigForm').addEventListener('submit', saveConfig);
+  const offlineConfigForm = document.getElementById('offlineConfigForm');
+  if (offlineConfigForm) offlineConfigForm.addEventListener('submit', saveConfig);
   document.getElementById('btnCloseDetail').addEventListener('click', () => document.getElementById('updatesDetailModal').classList.remove('is-open'));
-  document.getElementById('unitsTable').addEventListener('click', (ev) => {
+  document.getElementById('unitsTables').addEventListener('click', (ev) => {
     const unitBtn = ev.target.closest('[data-unit]');
     const versionBtn = ev.target.closest('[data-version]');
     if (unitBtn) openUnit(unitBtn.dataset.unit, unitBtn.dataset.system).catch((err) => openModal('Erro', `<p>${esc(err.message)}</p>`));

@@ -16,6 +16,7 @@
       </section>
 
       <form id="form-funcionario" action="/admin/funcionarios/{$funcionarios.id_usuario}" method="post">
+        <input type="hidden" name="_csrf" value="{$csrf_token}">
         <div class="card">
           <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h3 class="card-title mb-0"><i class="fa-solid fa-user-gear me-2 text-primary"></i>Dados do usuário</h3>
@@ -60,8 +61,24 @@
                     <option value="ADMIN" {if="$funcionarios.perfil=='ADMIN'"}selected{/if}>Administrador</option>
                     <option value="SUPERVISOR" {if="$funcionarios.perfil=='SUPERVISOR'"}selected{/if}>Supervisor</option>
                     <option value="ASSESSOR" {if="$funcionarios.perfil=='ASSESSOR'"}selected{/if}>Assessor</option>
+                    <option value="CONSULTA" {if="$funcionarios.perfil=='CONSULTA'"}selected{/if}>Consulta</option>
                   </select>
                 </div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <label class="form-label fw-semibold">Regiões permitidas</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fa-solid fa-map-location-dot"></i></span>
+                  <div class="form-control h-auto py-2">
+                    {loop="$regioes"}
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="regiao_ids[]" id="regiao_{$value.id_regiao}" value="{$value.id_regiao}" {if="in_array($value.id_regiao, $regioes_usuario)"}checked{/if}>
+                      <label class="form-check-label" for="regiao_{$value.id_regiao}">{$value.nome}</label>
+                    </div>
+                    {/loop}
+                  </div>
+                </div>
+                <div class="form-text">Marque uma ou mais regiões para este perfil.</div>
               </div>
               <div class="col-12 col-lg-6">
                 <label for="id_usuario" class="form-label fw-semibold">ID do usuário</label>

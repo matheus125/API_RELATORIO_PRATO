@@ -4,3 +4,5 @@ storage/keys/
 storage/logs/
 storage/source-sync/
 storage/updates/
+storage/backups/
+storage/deploy/

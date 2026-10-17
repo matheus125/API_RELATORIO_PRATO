@@ -4,6 +4,7 @@ namespace Hcode\Model;
 
 use \Hcode\DB\Sql;
 use \Hcode\Model;
+use Hcode\Audit\AuditLogger;
 use Hcode\Security\Permissions;
 
 class Funcionarios extends Model
@@ -14,6 +15,7 @@ class Funcionarios extends Model
 	const ERROR = "UserError";
 	const ERROR_REGISTER = "UserErrorRegister";
 	const SUCCESS = "UserSucesss";
+	private static $permissionsCacheUser = null;
 
 
 	public static function getFromSession()
@@ -76,18 +78,22 @@ class Funcionarios extends Model
 	public static function getPermissions(bool $forceRefresh = false): array
 	{
 		if (!self::checkLogin()) {
+			self::$permissionsCacheUser = null;
 			return [];
 		}
 
+		$perfil = $_SESSION[self::SESSION]['perfil'] ?? 'ASSESSOR';
+		$cacheUser = (int)$_SESSION[self::SESSION]['id_usuario'] . ':' . $perfil;
+		// O cache da sessão só é reutilizado após consultar a ACL nesta requisição.
 		if (
 			!$forceRefresh &&
+			self::$permissionsCacheUser === $cacheUser &&
 			isset($_SESSION[self::SESSION]['permissions']) &&
 			is_array($_SESSION[self::SESSION]['permissions'])
 		) {
 			return $_SESSION[self::SESSION]['permissions'];
 		}
 
-		$perfil = $_SESSION[self::SESSION]['perfil'] ?? 'ASSESSOR';
 		$permissions = [];
 
 		try {
@@ -110,17 +116,17 @@ class Funcionarios extends Model
 				$permissions = array_map(function ($row) {
 					return $row['permission_key'];
 				}, $rows);
+			} else {
+				// Compatibilidade apenas para instalações ainda sem as tabelas de ACL.
+				$defaults = Permissions::defaultProfilePermissions();
+				$permissions = $defaults[$perfil] ?? [];
 			}
 		} catch (\Exception $e) {
 			$permissions = [];
 		}
 
-		if (empty($permissions)) {
-			$defaults = Permissions::defaultProfilePermissions();
-			$permissions = $defaults[$perfil] ?? [];
-		}
-
 		$_SESSION[self::SESSION]['permissions'] = array_values(array_unique($permissions));
+		self::$permissionsCacheUser = $cacheUser;
 
 		return $_SESSION[self::SESSION]['permissions'];
 	}
@@ -189,6 +195,17 @@ class Funcionarios extends Model
 		} catch (\Throwable $e) {
 			// evita quebrar o fluxo por erro de log
 		}
+
+		AuditLogger::log([
+			'categoria' => AuditLogger::PERMISSION_DENIED,
+			'acao' => AuditLogger::PERMISSION_DENIED,
+			'modulo' => 'SEGURANCA',
+			'descricao' => 'Tentativa de acesso sem permissão.',
+			'rota' => $rota,
+			'status' => 'DENIED',
+			'severidade' => AuditLogger::WARNING,
+			'erro' => ['permissao_exigida' => $rota],
+		]);
 	}
 
 	public static function login($cpf, $senha)
@@ -232,6 +249,10 @@ class Funcionarios extends Model
 			throw new \Exception("Usuário inexistente ou senha inválida.");
 		}
 
+		if (session_status() === PHP_SESSION_ACTIVE) {
+			session_regenerate_id(true);
+		}
+
 		$user = new Funcionarios();
 		$user->setData($data);
 
@@ -240,10 +261,15 @@ class Funcionarios extends Model
 		self::refreshPermissions();
 
 		self::audit(
-			'LOGIN',
+			AuditLogger::AUTH_LOGIN,
 			'AUTH',
 			null,
-			'Usuário realizou login no sistema'
+			'Login realizado com sucesso.',
+			[
+				'categoria' => AuditLogger::AUTH_LOGIN,
+				'entidade' => 'usuario',
+				'registro_id' => (int)($data['id_usuario'] ?? 0),
+			]
 		);
 
 		return $user;
@@ -251,39 +277,34 @@ class Funcionarios extends Model
 
 	public static function registerAccess(Funcionarios $funcionarios, string $acao)
 	{
-		try {
-			$sql = new Sql();
-
-			$sql->query(
-				"INSERT INTO tb_userlogs
-				(id_usuario, cpf_usuario, nome_funcionario, acao, ip, user_agent, created_at)
-				VALUES
-				(:id_usuario, :cpf_usuario, :nome_funcionario, :acao, :ip, :user_agent, NOW())",
-				[
-					":id_usuario"       => $funcionarios->getid_usuario(),
-					":cpf_usuario"      => $funcionarios->getcpf(),
-					":nome_funcionario" => $funcionarios->getnome_funcionario(),
-					":acao"             => $acao,
-					":ip"               => $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0',
-					":user_agent"       => $_SERVER['HTTP_USER_AGENT'] ?? 'UNKNOWN'
-				]
-			);
-		} catch (\Exception $e) {
-			var_dump($e->getMessage());
-			exit;
-		}
+		AuditLogger::log([
+			'categoria' => $acao === 'LOGOUT' ? AuditLogger::AUTH_LOGOUT : AuditLogger::ACCESS,
+			'acao' => $acao,
+			'modulo' => $acao === 'LOGOUT' ? 'AUTH' : 'SISTEMA',
+			'descricao' => $acao === 'LOGOUT' ? 'Logout realizado.' : 'Acesso registrado.',
+			'actor' => [
+				'id_usuario' => $funcionarios->getid_usuario(),
+				'cpf' => $funcionarios->getcpf(),
+				'nome_funcionario' => $funcionarios->getnome_funcionario(),
+			],
+		]);
 	}
 
 	public static function logout()
 	{
 		self::audit(
-			'LOGOUT',
+			AuditLogger::AUTH_LOGOUT,
 			'AUTH',
 			null,
-			'Usuário encerrou sessão'
+			'Logout realizado.',
+			['categoria' => AuditLogger::AUTH_LOGOUT]
 		);
 
-		$_SESSION[self::SESSION] = NULL;
+		$_SESSION = [];
+		if (ini_get('session.use_cookies')) {
+			$params = session_get_cookie_params();
+			setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'] ?? '', (bool)$params['secure'], (bool)$params['httponly']);
+		}
 		session_destroy();
 	}
 
@@ -294,11 +315,15 @@ class Funcionarios extends Model
 		return $sql->select("
 			SELECT 
 				a.*,
-				b.*
+				b.*,
+				COALESCE(GROUP_CONCAT(DISTINCT r.nome ORDER BY r.nome SEPARATOR ', '), 'Sem região') AS regioes_acesso
 			FROM tb_usuario a
 			INNER JOIN tb_funcionario b USING (id_pessoa)
+			LEFT JOIN tb_usuario_regioes ur ON ur.id_usuario = a.id_usuario
+			LEFT JOIN tb_regioes r ON r.id_regiao = ur.id_regiao
 			WHERE a.ativo = 1
 			AND b.ativo = 1
+			GROUP BY a.id_usuario, b.id_pessoa
 			ORDER BY b.nome_funcionario
 		");
 	}
@@ -317,11 +342,82 @@ class Funcionarios extends Model
 				b.nome_funcionario,
 				b.email,
 				b.nrphone,
-				b.ativo AS funcionario_ativo
+				b.ativo AS funcionario_ativo,
+				COALESCE(GROUP_CONCAT(DISTINCT r.nome ORDER BY r.nome SEPARATOR ', '), 'Sem região') AS regioes_acesso
 			FROM tb_usuario a
 			INNER JOIN tb_funcionario b ON a.id_pessoa = b.id_pessoa
+			LEFT JOIN tb_usuario_regioes ur ON ur.id_usuario = a.id_usuario
+			LEFT JOIN tb_regioes r ON r.id_regiao = ur.id_regiao
+			GROUP BY a.id_usuario, b.id_pessoa
 			ORDER BY b.nome_funcionario
 		");
+	}
+
+	public static function listRegioes(): array
+	{
+		try {
+			$sql = new Sql();
+			if (count($sql->select("SHOW TABLES LIKE 'tb_regioes'")) === 0) {
+				return [];
+			}
+
+			return $sql->select("
+				SELECT id_regiao, codigo, nome
+				FROM tb_regioes
+				WHERE ativo = 1
+				ORDER BY FIELD(codigo, 'CAPITAL', 'INTERIOR'), nome
+			");
+		} catch (\Throwable $e) {
+			return [];
+		}
+	}
+
+	public static function getUserRegioes(int $idUsuario): array
+	{
+		try {
+			$sql = new Sql();
+			if (count($sql->select("SHOW TABLES LIKE 'tb_usuario_regioes'")) === 0) {
+				return [];
+			}
+
+			$rows = $sql->select("
+				SELECT id_regiao
+				FROM tb_usuario_regioes
+				WHERE id_usuario = :id_usuario
+			", [
+				':id_usuario' => $idUsuario
+			]);
+
+			return array_map('intval', array_column($rows, 'id_regiao'));
+		} catch (\Throwable $e) {
+			return [];
+		}
+	}
+
+	public static function saveUserRegioes(int $idUsuario, array $regioes): void
+	{
+		$regioes = array_values(array_unique(array_filter(array_map('intval', $regioes), function ($id) {
+			return $id > 0;
+		})));
+
+		$sql = new Sql();
+		if (count($sql->select("SHOW TABLES LIKE 'tb_usuario_regioes'")) === 0) {
+			return;
+		}
+
+		$sql->query("DELETE FROM tb_usuario_regioes WHERE id_usuario = :id_usuario", [
+			':id_usuario' => $idUsuario
+		]);
+
+		foreach ($regioes as $idRegiao) {
+			$sql->query("
+				INSERT IGNORE INTO tb_usuario_regioes (id_usuario, id_regiao)
+				VALUES (:id_usuario, :id_regiao)
+			", [
+				':id_usuario' => $idUsuario,
+				':id_regiao' => $idRegiao
+			]);
+		}
 	}
 
 	public static function setUserActive(int $idUsuario, int $ativo): void
@@ -341,7 +437,13 @@ class Funcionarios extends Model
 			$ativo ? 'USUARIO_UNBLOCK' : 'USUARIO_BLOCK',
 			'SEGURANCA',
 			$idUsuario,
-			$ativo ? 'Usuário ativado/desbloqueado' : 'Usuário bloqueado/inativado'
+			$ativo ? 'Usuário ativado/desbloqueado' : 'Usuário bloqueado/inativado',
+			[
+				'categoria' => AuditLogger::UPDATE,
+				'entidade' => 'usuario',
+				'registro_id' => $idUsuario,
+				'alteracoes' => ['ativo' => ['antes' => $ativo ? 0 : 1, 'depois' => $ativo]],
+			]
 		);
 	}
 
@@ -362,7 +464,13 @@ class Funcionarios extends Model
 			$ativo ? 'FUNCIONARIO_ACTIVATE' : 'FUNCIONARIO_INACTIVATE',
 			'FUNCIONARIOS',
 			$idPessoa,
-			$ativo ? 'Funcionário ativado' : 'Funcionário inativado'
+			$ativo ? 'Funcionário ativado' : 'Funcionário inativado',
+			[
+				'categoria' => AuditLogger::UPDATE,
+				'entidade' => 'funcionario',
+				'registro_id' => $idPessoa,
+				'alteracoes' => ['ativo' => ['antes' => $ativo ? 0 : 1, 'depois' => $ativo]],
+			]
 		);
 	}
 
@@ -397,7 +505,13 @@ class Funcionarios extends Model
 			'FUNCIONARIO_CREATE',
 			'FUNCIONARIOS',
 			(int)($this->getid_usuario() ?? 0),
-			'Novo funcionário cadastrado'
+			'Novo funcionário cadastrado',
+			[
+				'categoria' => AuditLogger::CREATE,
+				'entidade' => 'funcionario',
+				'registro_id' => (int)($this->getid_usuario() ?? 0),
+				'dados_novos' => $this->getValues(),
+			]
 		);
 	}
 
@@ -481,33 +595,74 @@ class Funcionarios extends Model
 	public function update(int $id_usuario, array $data)
 	{
 		$sql = new Sql();
+		$before = $this->getValues();
 
-		$sql->query(
-			"CALL sp_funcionario_usuario_update(
-				:id_usuario,
-				:nome_funcionario,
-				:email,
-				:nrphone,
-				:cpf,
-				:senha,
-				:perfil
-			)",
-			[
-				':id_usuario'       => $id_usuario,
+		$perfil = strtoupper(trim((string)($data['perfil'] ?? 'ASSESSOR')));
+		$inadmin = $perfil === 'ADMIN' ? 1 : 0;
+
+		$sql->query("START TRANSACTION");
+
+		try {
+			$sql->query("
+				UPDATE tb_funcionario f
+				INNER JOIN tb_usuario u ON u.id_pessoa = f.id_pessoa
+				SET
+					f.nome_funcionario = :nome_funcionario,
+					f.email = :email,
+					f.nrphone = :nrphone
+				WHERE u.id_usuario = :id_usuario
+			", [
 				':nome_funcionario' => $data['nome_funcionario'],
-				':email'            => $data['email'],
-				':nrphone'          => $data['nrphone'],
-				':cpf'              => $data['cpf'],
-				':senha'            => $data['senha'] ?? null,
-				':perfil'           => $data['perfil']
-			]
-		);
+				':email' => $data['email'],
+				':nrphone' => $data['nrphone'],
+				':id_usuario' => $id_usuario,
+			]);
+
+			$params = [
+				':cpf' => $data['cpf'],
+				':perfil' => $perfil,
+				':inadmin' => $inadmin,
+				':id_usuario' => $id_usuario,
+			];
+			$setSenha = '';
+			if (isset($data['senha']) && trim((string)$data['senha']) !== '') {
+				$setSenha = ', senha = :senha';
+				$params[':senha'] = self::getPasswordHash(trim((string)$data['senha']));
+			}
+
+			$sql->query("
+				UPDATE tb_usuario
+				SET
+					cpf = :cpf,
+					perfil = :perfil,
+					inadmin = :inadmin
+					{$setSenha}
+				WHERE id_usuario = :id_usuario
+			", $params);
+
+			$sql->query("COMMIT");
+		} catch (\Throwable $e) {
+			$sql->query("ROLLBACK");
+			throw $e;
+		}
+
+		$this->get($id_usuario);
+		$after = $this->getValues();
+		$changes = AuditLogger::diff($before, $after);
 
 		self::audit(
 			'FUNCIONARIO_UPDATE',
 			'FUNCIONARIOS',
 			$id_usuario,
-			'Dados do funcionário foram atualizados'
+			'Dados do funcionário foram atualizados',
+			[
+				'categoria' => AuditLogger::UPDATE,
+				'entidade' => 'funcionario',
+				'registro_id' => $id_usuario,
+				'dados_anteriores' => $before,
+				'dados_novos' => $after,
+				'alteracoes' => $changes,
+			]
 		);
 	}
 
@@ -520,6 +675,7 @@ class Funcionarios extends Model
 		}
 
 		$idUsuario = (int)$this->getid_usuario();
+		$before = $this->getValues();
 
 		$sql->query(
 			"CALL sp_funcionario_usuario_soft_delete(:id_usuario)",
@@ -532,7 +688,13 @@ class Funcionarios extends Model
 			'FUNCIONARIO_DELETE',
 			'FUNCIONARIOS',
 			$idUsuario,
-			'Funcionário removido do sistema'
+			'Funcionário removido do sistema',
+			[
+				'categoria' => AuditLogger::DELETE,
+				'entidade' => 'funcionario',
+				'registro_id' => $idUsuario,
+				'dados_anteriores' => $before,
+			]
 		);
 	}
 
@@ -550,10 +712,16 @@ class Funcionarios extends Model
 		]);
 
 		self::audit(
-			'FUNCIONARIO_PASSWORD',
+			AuditLogger::AUTH_PASSWORD_CHANGE,
 			'FUNCIONARIOS',
 			(int)$this->getid_usuario(),
-			'Senha do usuário foi alterada'
+			'Senha alterada com sucesso.',
+			[
+				'categoria' => AuditLogger::AUTH_PASSWORD_CHANGE,
+				'entidade' => 'usuario',
+				'registro_id' => (int)$this->getid_usuario(),
+				'severidade' => AuditLogger::NOTICE,
+			]
 		);
 	}
 
@@ -562,6 +730,13 @@ class Funcionarios extends Model
 		return password_hash($senha, PASSWORD_DEFAULT, [
 			'cost' => 12
 		]);
+	}
+
+	public static function isStrongPassword(string $senha): bool
+	{
+		return strlen($senha) >= 8
+			&& preg_match('/[A-Za-z]/', $senha) === 1
+			&& preg_match('/\d/', $senha) === 1;
 	}
 
 	public static function setError($msg)
@@ -687,35 +862,18 @@ class Funcionarios extends Model
 		string $acao,
 		string $modulo,
 		?int $referenciaId = null,
-		?string $detalhes = null
+		?string $detalhes = null,
+		array $context = []
 	): void {
-		try {
-			if (!isset($_SESSION[self::SESSION]['id_usuario'])) {
-				return;
-			}
-
-			$sql = new Sql();
-
-			$sql->query(
-				"INSERT INTO tb_userlogs
-				(id_usuario, cpf_usuario, nome_funcionario, acao, modulo, referencia_id, detalhes, ip, user_agent, created_at)
-				VALUES
-				(:id_usuario, :cpf_usuario, :nome_funcionario, :acao, :modulo, :referencia_id, :detalhes, :ip, :user_agent, NOW())",
-				[
-					':id_usuario' => $_SESSION[self::SESSION]['id_usuario'],
-					':cpf_usuario' => $_SESSION[self::SESSION]['cpf'] ?? '',
-					':nome_funcionario' => $_SESSION[self::SESSION]['nome_funcionario'] ?? '',
-					':acao' => $acao,
-					':modulo' => $modulo,
-					':referencia_id' => $referenciaId,
-					':detalhes' => $detalhes,
-					':ip' => $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0',
-					':user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'UNKNOWN'
-				]
-			);
-		} catch (\Throwable $e) {
-			// não quebra o fluxo da aplicação por erro de log
-		}
+		AuditLogger::log(array_merge($context, [
+			'acao' => $acao,
+			'categoria' => $context['categoria'] ?? $acao,
+			'modulo' => $modulo,
+			'referencia_id' => $referenciaId,
+			'registro_id' => $context['registro_id'] ?? $referenciaId,
+			'detalhes' => $detalhes,
+			'descricao' => $context['descricao'] ?? $detalhes,
+		]));
 	}
 
 	public static function getLoginAttempts()
@@ -812,10 +970,19 @@ class Funcionarios extends Model
 		);
 
 		self::audit(
-			'PASSWORD_RECOVERY_REQUEST',
+			AuditLogger::AUTH_PASSWORD_RECOVERY,
 			'AUTH',
 			(int)$data["id_usuario"],
-			'Solicitação de recuperação de senha por CPF com envio de e-mail'
+			'Solicitação de recuperação de senha por CPF com envio de e-mail.',
+			[
+				'categoria' => AuditLogger::AUTH_PASSWORD_RECOVERY,
+				'entidade' => 'usuario',
+				'registro_id' => (int)$data["id_usuario"],
+				'dados_novos' => [
+					'email' => $data['email'] ?? '',
+					'token' => '[REDACTED]',
+				],
+			]
 		);
 
 		return [

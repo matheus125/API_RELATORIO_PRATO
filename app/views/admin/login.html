@@ -931,6 +931,7 @@
           </p>
 
           <form action="/admin/login" method="post" id="loginForm">
+            <input type="hidden" name="_csrf" value="{$csrf_token}">
 
             {if="$error != ''"}
             <div class="login-alert login-alert-error" role="alert" id="inlineLoginError">

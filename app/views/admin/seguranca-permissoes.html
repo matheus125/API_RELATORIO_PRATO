@@ -1,1 +1,279 @@
-<main class="app-main"><div class="app-content-header"><div class="container-fluid"><div class="portal-page-header"><div class="portal-kicker"><i class="bi bi-shield-lock"></i> Gestão de perfis</div><h1 class="portal-page-title">Permissões por perfil</h1><p class="portal-page-subtitle">Gerencie a matriz de acesso do sistema por perfil, mantendo governança e segurança nas rotas administrativas.</p></div></div></div><div class="app-content"><div class="container-fluid"><form method="post" action="/admin/seguranca/permissoes"><div class="card"><div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"><h3 class="card-title mb-0">Matriz de permissões</h3><button class="btn btn-primary" type="submit"><i class="bi bi-save me-1"></i> Salvar permissões</button></div><div class="card-body">{loop="$permissions"}<div class="row g-3 align-items-center py-3 border-bottom"><div class="col-lg-4"><div class="fw-bold">{$value.module_name}</div><div class="text-muted small">{$value.description}</div><div class="text-primary small mt-1">{$value.permission_key}</div></div><div class="col-lg-8"><div class="d-flex gap-3 flex-wrap"><label class="form-check form-check-inline m-0"><input class="form-check-input" type="checkbox" name="permissions[ADMIN][]" value="{$value.permission_key}" {if="in_array($value.permission_key, $admin_permissions)"}checked{/if}> <span class="form-check-label fw-semibold">ADMIN</span></label><label class="form-check form-check-inline m-0"><input class="form-check-input" type="checkbox" name="permissions[SUPERVISOR][]" value="{$value.permission_key}" {if="in_array($value.permission_key, $supervisor_permissions)"}checked{/if}> <span class="form-check-label fw-semibold">SUPERVISOR</span></label><label class="form-check form-check-inline m-0"><input class="form-check-input" type="checkbox" name="permissions[ASSESSOR][]" value="{$value.permission_key}" {if="in_array($value.permission_key, $assessor_permissions)"}checked{/if}> <span class="form-check-label fw-semibold">ASSESSOR</span></label></div></div></div>{/loop}</div></div></form></div></div></main>
+<style>
+  .acl-page { --acl-border: #dfe7f2; --acl-muted: #64748b; --acl-blue: #1769ee; }
+  .acl-page [hidden] { display: none !important; }
+  .acl-page .acl-workspace { padding: 1.5rem; border: 1px solid var(--acl-border); border-radius: 20px; background: #fff; }
+  .acl-page .acl-heading { margin: 0 0 .35rem; color: #172b4d; font-size: 1.12rem; font-weight: 700; }
+  .acl-page .acl-description { margin: 0 0 1.25rem; color: var(--acl-muted); font-size: .9rem; }
+  .acl-page .acl-profile-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-bottom: 1.5rem; }
+  .acl-page .acl-profile-tab { display: flex; align-items: center; gap: .75rem; padding: .95rem 1rem; text-align: left; color: #43536c; background: #f8faff; border: 1px solid var(--acl-border); border-radius: 12px; transition: background .15s, border-color .15s; }
+  .acl-page .acl-profile-tab:hover { background: #f0f5ff; border-color: #9cbbf5; }
+  .acl-page .acl-profile-tab[aria-selected="true"] { color: #1248a3; border-color: var(--acl-blue); background: #edf4ff; box-shadow: 0 0 0 1px var(--acl-blue); }
+  .acl-page .acl-profile-tab > .bi { font-size: 1.25rem; }
+  .acl-page .acl-tab-name { display: block; font-size: .9rem; font-weight: 700; }
+  .acl-page .acl-tab-count { display: block; margin-top: .2rem; font-size: .76rem; color: var(--acl-muted); }
+  .acl-page .acl-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-top: 1.25rem; margin-bottom: 1.25rem; border-top: 1px solid #edf1f7; }
+  .acl-page .acl-search { width: min(100%, 370px); }
+  .acl-page .acl-search .form-label { color: #43536c; font-size: .8rem; margin-bottom: .4rem; }
+  .acl-page .acl-search-field { position: relative; }
+  .acl-page .acl-search-field > .bi { position: absolute; top: 50%; left: .85rem; transform: translateY(-50%); color: var(--acl-muted); pointer-events: none; }
+  .acl-page .acl-search-field .form-control { padding-left: 2.35rem; border-color: var(--acl-border); border-radius: 10px; }
+  .acl-page .acl-current-profile { color: #172b4d; font-size: 1rem; font-weight: 700; margin: 0 0 .35rem; }
+  .acl-page .acl-result-count { color: var(--acl-muted); font-size: .82rem; margin: 0; }
+  .acl-page .acl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; align-items: stretch; }
+  .acl-page .acl-module { border: 1px solid var(--acl-border); border-radius: 12px; overflow: hidden; background: #fff; }
+  .acl-page .acl-module-header { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .95rem 1rem; background: #f7f9fd; border-bottom: 1px solid #edf1f7; }
+  .acl-page .acl-module-title { display: flex; align-items: center; gap: .55rem; margin: 0; color: #243a5b; font-size: .9rem; font-weight: 700; }
+  .acl-page .acl-module-title .bi { color: #6a83aa; }
+  .acl-page .acl-module-count { color: var(--acl-muted); font-size: .73rem; white-space: nowrap; }
+  .acl-page .acl-module-actions { padding: .5rem; }
+  .acl-page .acl-action { display: flex; align-items: flex-start; gap: .65rem; padding: .75rem .5rem; margin: 0; cursor: pointer; border-radius: 7px; }
+  .acl-page .acl-action:hover { background: #f4f8ff; }
+  .acl-page .acl-action .form-check-input { float: none; flex: 0 0 1rem; width: 1rem; height: 1rem; margin: .13rem 0 0; cursor: pointer; }
+  .acl-page .acl-action-text { min-width: 0; }
+  .acl-page .acl-action-description { display: block; color: #354a69; font-size: .87rem; font-weight: 400; line-height: 1.45; }
+  .acl-page .acl-action-key { display: block; margin-top: .17rem; color: #8392a8; font-size: .68rem; line-height: 1.35; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+  .acl-page .acl-action.is-changed { background: #fff9ec; }
+  .acl-page .acl-empty { padding: 3rem 1rem; text-align: center; border: 1px dashed var(--acl-border); border-radius: 12px; background: #fafcff; }
+  .acl-page .acl-empty > .bi { display: block; color: #8aa0bf; font-size: 1.75rem; margin-bottom: .75rem; }
+  .acl-page .acl-empty strong { display: block; color: #354a69; margin-bottom: .35rem; }
+  .acl-page .acl-empty p { margin-bottom: .75rem; color: var(--acl-muted); font-size: .88rem; }
+  .acl-page .acl-savebar { position: sticky; bottom: 1rem; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 1rem 0 1.5rem; padding: 1rem 1.25rem; border: 1px solid var(--acl-border); border-radius: 14px; background: #fff; box-shadow: 0 6px 24px rgba(25, 51, 90, .1); }
+  .acl-page .acl-save-status { display: flex; align-items: center; gap: .6rem; color: var(--acl-muted); font-size: .86rem; }
+  .acl-page .acl-save-status.is-dirty { color: #946000; }
+  .acl-page .acl-save-button { flex-shrink: 0; min-width: 190px; }
+  .acl-page button:focus-visible, .acl-page input:focus-visible, .acl-page .acl-panel:focus-visible { outline: 3px solid #80adff; outline-offset: 3px; }
+  @media (max-width: 1199.98px) {
+    .acl-page .acl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .acl-page .acl-profile-tab { padding: .8rem; gap: .5rem; }
+  }
+  @media (max-width: 767.98px) {
+    .acl-page .acl-workspace { padding: 1rem; border-radius: 16px; }
+    .acl-page .acl-profile-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .acl-page .acl-toolbar { align-items: stretch; flex-direction: column; }
+    .acl-page .acl-search { width: 100%; }
+    .acl-page .acl-grid { grid-template-columns: minmax(0, 1fr); }
+    .acl-page .acl-savebar { flex-direction: column; align-items: stretch; bottom: .5rem; padding: .9rem; gap: .8rem; }
+    .acl-page .acl-save-button { width: 100%; }
+  }
+</style>
+
+<main class="app-main acl-page">
+  <div class="app-content-header">
+    <div class="container-fluid">
+      <div class="portal-page-header">
+        <div class="portal-kicker"><i class="bi bi-shield-lock" aria-hidden="true"></i> Gestão de perfis</div>
+        <h1 class="portal-page-title">Permissões por perfil</h1>
+        <p class="portal-page-subtitle">Defina as telas e ações disponíveis para cada perfil, com os acessos organizados por módulo.</p>
+      </div>
+    </div>
+  </div>
+  <div class="app-content">
+    <div class="container-fluid">
+      {if="$success_message != ''"}
+      <div class="alert alert-success" role="status"><i class="bi bi-check-circle me-2" aria-hidden="true"></i>{$success_message}</div>
+      {/if}
+      {if="$error_message != ''"}
+      <div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-circle me-2" aria-hidden="true"></i>{$error_message}</div>
+      {/if}
+      <form id="acl-permissions-form" method="post" action="/admin/seguranca/permissoes">
+        <input type="hidden" name="_csrf" value="{$csrf_token}">
+        <input type="hidden" id="acl-selected-profile" name="selected_profile" value="{$selected_profile}">
+        <div class="acl-workspace">
+          <h2 class="acl-heading">Permissões por módulo</h2>
+          <p class="acl-description">Selecione um perfil e marque as ações que ele poderá realizar. Salve para aplicar as alterações.</p>
+          <div class="acl-profile-tabs" role="tablist" aria-label="Perfil de acesso">
+            {loop="$profiles" as $profile}
+            <button type="button" class="acl-profile-tab" id="acl-tab-{$profile.key}" role="tab" aria-controls="acl-panel-{$profile.key}" aria-selected="{if="$profile.key == $selected_profile"}true{else}false{/if}" tabindex="{if="$profile.key == $selected_profile"}0{else}-1{/if}" data-profile="{$profile.key}">
+              <i class="bi bi-person-badge" aria-hidden="true"></i>
+              <span><span class="acl-tab-name">{$profile.label}</span><span class="acl-tab-count"><span data-profile-count="{$profile.key}">{function="count($profile.permissions)"}</span> <span data-profile-count-label>{if="count($profile.permissions) == 1"}acesso selecionado{else}acessos selecionados{/if}</span></span></span>
+            </button>
+            {/loop}
+          </div>
+          <div class="acl-toolbar">
+            <div>
+              <h2 class="acl-current-profile">Acessos de <span id="acl-current-label">{$selected_profile}</span></h2>
+              <p id="acl-results" class="acl-result-count" role="status" aria-live="polite"></p>
+            </div>
+            <div class="acl-search">
+              <label class="form-label" for="acl-search">Buscar módulo ou ação</label>
+              <div class="acl-search-field"><i class="bi bi-search" aria-hidden="true"></i><input id="acl-search" type="search" class="form-control" placeholder="Ex.: relatórios, visualizar…" autocomplete="off"></div>
+            </div>
+          </div>
+          <noscript>
+            <style>.acl-page .acl-panel[hidden] { display: block !important; } .acl-page .acl-profile-tabs, .acl-page .acl-toolbar { display: none; } .acl-page .acl-panel { margin-bottom: 2rem; } .acl-page .acl-panel-label { display: block !important; }</style>
+            <p class="alert alert-info">Os quatro perfis estão exibidos abaixo. Marque os acessos desejados e salve as permissões.</p>
+          </noscript>
+          {loop="$profiles" as $profile}
+          <section class="acl-panel" id="acl-panel-{$profile.key}" role="tabpanel" aria-labelledby="acl-tab-{$profile.key}" tabindex="0" data-profile="{$profile.key}" data-profile-label="{$profile.label}" {if="$profile.key != $selected_profile"}hidden{/if}>
+            <h2 class="acl-panel-label" hidden>{$profile.label}</h2>
+            <div class="acl-grid">
+              {loop="$permission_modules" as $module}
+              <section class="acl-module" aria-labelledby="acl-module-{$profile.key}-{$module.key}" data-module-name="{$module.label}">
+                <div class="acl-module-header">
+                  <h3 class="acl-module-title" id="acl-module-{$profile.key}-{$module.key}"><i class="bi {$module.icon}" aria-hidden="true"></i>{$module.label}</h3>
+                  <span class="acl-module-count" aria-label="Acessos selecionados neste módulo"><span data-module-count>{function="count(array_intersect(array_column($module.permissions, 'permission_key'), $profile.permissions))"}</span> / {function="count($module.permissions)"}</span>
+                </div>
+                <div class="acl-module-actions">
+                  {loop="$module.permissions" as $permission}
+                  <label class="acl-action" for="acl-permission-{$profile.key}-{$permission.permission_key}">
+                    <input class="form-check-input" id="acl-permission-{$profile.key}-{$permission.permission_key}" type="checkbox" name="permissions[{$profile.key}][]" value="{$permission.permission_key}" {if="in_array($permission.permission_key, $profile.permissions)"}checked{/if}>
+                    <span class="acl-action-text"><span class="acl-action-description">{$permission.description}</span><span class="acl-action-key">{$permission.permission_key}</span></span>
+                  </label>
+                  {/loop}
+                </div>
+              </section>
+              {/loop}
+            </div>
+          </section>
+          {/loop}
+          <div id="acl-empty" class="acl-empty" hidden>
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <strong>Nenhum acesso encontrado</strong>
+            <p>Tente outro nome de módulo ou ação.</p>
+            <button id="acl-clear-search" type="button" class="btn btn-sm btn-outline-primary">Limpar busca</button>
+          </div>
+        </div>
+        <div class="acl-savebar">
+          <div id="acl-save-status" class="acl-save-status" role="status" aria-live="polite"><i class="bi bi-check2-circle" aria-hidden="true"></i><span id="acl-change-summary">Nenhuma alteração pendente.</span></div>
+          <button id="acl-save-button" class="btn btn-primary acl-save-button" type="submit"><i class="bi bi-save me-1" aria-hidden="true"></i><span>Salvar permissões</span></button>
+        </div>
+        {loop="$profiles" as $profile}
+        <input type="hidden" name="matrix_profiles[]" value="{$profile.key}">
+        {/loop}
+        <input type="hidden" name="matrix_complete" value="1">
+      </form>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var form = document.getElementById('acl-permissions-form');
+  if (!form) return;
+  var tabs = Array.from(form.querySelectorAll('.acl-profile-tab'));
+  var panels = Array.from(form.querySelectorAll('.acl-panel'));
+  var inputs = Array.from(form.querySelectorAll('input[type="checkbox"]'));
+  var selected = document.getElementById('acl-selected-profile');
+  var search = document.getElementById('acl-search');
+  var status = document.getElementById('acl-save-status');
+  var summary = document.getElementById('acl-change-summary');
+  var saveButton = document.getElementById('acl-save-button');
+  var initial = new Map(inputs.map(function (input) { return [input, input.checked]; }));
+  var dirtyCount = 0;
+  var submitting = false;
+
+  function normalize(text) {
+    return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim();
+  }
+
+  function filterModules() {
+    var query = normalize(search.value);
+    var panel = panels.find(function (item) { return item.dataset.profile === selected.value; });
+    if (!panel) return;
+    var visibleModules = 0;
+    var visibleActions = 0;
+    panel.querySelectorAll('.acl-module').forEach(function (module) {
+      var moduleMatches = normalize(module.dataset.moduleName).includes(query);
+      var matches = 0;
+      module.querySelectorAll('.acl-action').forEach(function (action) {
+        var show = moduleMatches || normalize(action.textContent).includes(query);
+        action.hidden = !show;
+        if (show) matches++;
+      });
+      module.hidden = matches === 0;
+      if (matches > 0) visibleModules++;
+      visibleActions += matches;
+    });
+    document.getElementById('acl-empty').hidden = visibleModules > 0;
+    document.getElementById('acl-results').textContent = visibleModules + (visibleModules === 1 ? ' módulo' : ' módulos') + ' · ' + visibleActions + (visibleActions === 1 ? ' ação disponível' : ' ações disponíveis');
+  }
+
+  function activateTab(tab, focus) {
+    selected.value = tab.dataset.profile;
+    tabs.forEach(function (item) {
+      var active = item === tab;
+      item.setAttribute('aria-selected', active ? 'true' : 'false');
+      item.tabIndex = active ? 0 : -1;
+    });
+    panels.forEach(function (panel) {
+      panel.hidden = panel.dataset.profile !== selected.value;
+      if (!panel.hidden) document.getElementById('acl-current-label').textContent = panel.dataset.profileLabel;
+    });
+    filterModules();
+    if (focus) tab.focus();
+  }
+
+  function updateCounts() {
+    dirtyCount = 0;
+    var changedProfiles = 0;
+    panels.forEach(function (panel) {
+      var count = 0;
+      var profileChanged = false;
+      panel.querySelectorAll('.acl-module').forEach(function (module) {
+        var moduleCount = 0;
+        module.querySelectorAll('input[type="checkbox"]').forEach(function (input) {
+          if (input.checked) { count++; moduleCount++; }
+          var changed = input.checked !== initial.get(input);
+          input.closest('.acl-action').classList.toggle('is-changed', changed);
+          if (changed) { dirtyCount++; profileChanged = true; }
+        });
+        module.querySelector('[data-module-count]').textContent = moduleCount;
+      });
+      var profileCount = form.querySelector('[data-profile-count="' + panel.dataset.profile + '"]');
+      profileCount.textContent = count;
+      profileCount.parentElement.querySelector('[data-profile-count-label]').textContent = count === 1 ? 'acesso selecionado' : 'acessos selecionados';
+      if (profileChanged) changedProfiles++;
+    });
+    status.classList.toggle('is-dirty', dirtyCount > 0);
+    status.querySelector('.bi').className = dirtyCount > 0 ? 'bi bi-pencil-square' : 'bi bi-check2-circle';
+    summary.textContent = dirtyCount > 0
+      ? dirtyCount + (dirtyCount === 1 ? ' alteração pendente' : ' alterações pendentes') + ' em ' + changedProfiles + (changedProfiles === 1 ? ' perfil.' : ' perfis.')
+      : 'Nenhuma alteração pendente.';
+  }
+
+  tabs.forEach(function (tab, index) {
+    tab.addEventListener('click', function () { activateTab(tab, false); });
+    tab.addEventListener('keydown', function (event) {
+      var next = index;
+      if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+      else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      activateTab(tabs[next], true);
+    });
+  });
+  inputs.forEach(function (input) { input.addEventListener('change', updateCounts); });
+  search.addEventListener('input', filterModules);
+  search.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') event.preventDefault();
+  });
+  document.getElementById('acl-clear-search').addEventListener('click', function () {
+    search.value = '';
+    filterModules();
+    search.focus();
+  });
+  form.addEventListener('submit', function (event) {
+    if (submitting) { event.preventDefault(); return; }
+    submitting = true;
+    saveButton.disabled = true;
+    saveButton.querySelector('span').textContent = 'Salvando permissões…';
+    form.setAttribute('aria-busy', 'true');
+  });
+  window.addEventListener('beforeunload', function (event) {
+    if (dirtyCount > 0 && !submitting) { event.preventDefault(); event.returnValue = ''; }
+  });
+  window.addEventListener('pageshow', function () {
+    submitting = false;
+    saveButton.disabled = false;
+    saveButton.querySelector('span').textContent = 'Salvar permissões';
+    form.removeAttribute('aria-busy');
+    updateCounts();
+  });
+  var firstTab = tabs.find(function (tab) { return tab.dataset.profile === selected.value; }) || tabs[0];
+  if (firstTab) activateTab(firstTab, false);
+  updateCounts();
+}());
+</script>

@@ -1,8 +1,29 @@
 <?php
-session_start();
 
 require_once __DIR__ . '/../config/paths.php';
 require_once ROOT_DIR . '/vendor/autoload.php';
+
+// Harden the session before starting it. The application is served behind HTTPS
+// in production, while the local development server remains usable over HTTP.
+$httpsRequest = !empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off';
+ini_set('session.use_only_cookies', '1');
+ini_set('session.use_strict_mode', '1');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'secure' => $httpsRequest,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+session_start();
+
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: same-origin');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
+if ($httpsRequest) {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
 
 use Slim\Slim;
 use Hcode\Middleware\PerfilMiddleware;

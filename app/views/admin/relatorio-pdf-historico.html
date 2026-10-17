@@ -842,6 +842,15 @@
                     </div>
 
                     <div class="field">
+                        <label for="regiao">Região</label>
+                        <select id="regiao" class="select">
+                            <option value="">Capital e Interior</option>
+                            <option value="CAPITAL">Capital</option>
+                            <option value="INTERIOR">Interior</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
                         <label for="pageSize">Itens por página</label>
                         <select id="pageSize" class="select">
                             <option value="10">10</option>
@@ -874,6 +883,7 @@
                         <tr>
                             <th class="check-cell"><input id="selectAllRows" type="checkbox" title="Selecionar todos"></th>
                             <th style="width:90px">ID</th>
+                            <th style="width:110px">Região</th>
                             <th>Arquivo</th>
                             <th style="width:130px">Data relatório</th>
                             <th style="width:130px">Upload</th>
@@ -885,7 +895,7 @@
                     </thead>
                     <tbody id="tabelaBody">
                         <tr>
-                            <td colspan="9">
+                            <td colspan="10">
                                 <div class="empty">
                                     <div class="empty-icon">📄</div>
                                     <div>Carregando histórico...</div>
@@ -935,6 +945,7 @@
             busca: document.getElementById('busca'),
             data: document.getElementById('data'),
             status: document.getElementById('status'),
+            regiao: document.getElementById('regiao'),
             pageSize: document.getElementById('pageSize'),
             selectAllRows: document.getElementById('selectAllRows'),
             tabelaBody: document.getElementById('tabelaBody'),
@@ -1035,6 +1046,7 @@
             if (els.busca.value) params.set('busca', els.busca.value);
             if (els.data.value) params.set('data', els.data.value);
             if (els.status.value) params.set('status', els.status.value);
+            if (els.regiao.value) params.set('regiao', els.regiao.value);
             return params.toString();
         }
 
@@ -1056,6 +1068,9 @@
                     item.unidade,
                     item.unidade_nome,
                     item.nome_banco,
+                    item.regiao,
+                    item.regiao_nome,
+                    item.municipio,
                     item.data_relatorio,
                     item.data_geracao,
                     item.data_upload
@@ -1127,7 +1142,7 @@
             if (!items.length) {
                 els.tabelaBody.innerHTML = `
                 <tr>
-                    <td colspan="9">
+                    <td colspan="10">
                         <div class="empty">
                             <div class="empty-icon">📂</div>
                             <div><strong>Nenhum relatório encontrado</strong></div>
@@ -1150,6 +1165,7 @@
                         <input class="row-check" type="checkbox" ${checked} onchange="PDFDASH.toggleSelecionado(${Number(item.id)}, this.checked)" aria-label="Selecionar PDF #${escapeHtml(item.id)}">
                     </td>
                     <td><strong>#${escapeHtml(item.id)}</strong></td>
+                    <td>${escapeHtml(item.regiao_nome || item.regiao || '-')}</td>
                     <td>
                         <div class="file-stack">
                             <div class="file-name">${escapeHtml(item.nome_arquivo || '-')}</div>
@@ -1478,6 +1494,8 @@
                 <div class="detail-item"><span class="detail-label">Status do upload</span><div class="detail-value">${statusBadge(item.status_upload)}</div></div>
                 <div class="detail-item"><span class="detail-label">Status da nuvem</span><div class="detail-value"><span class="pill ${rs.cls}">● ${escapeHtml(rs.label)}</span></div></div>
                 <div class="detail-item"><span class="detail-label">Data do relatório</span><div class="detail-value">${formatDate(item.data_relatorio)}</div></div>
+                <div class="detail-item"><span class="detail-label">Região</span><div class="detail-value">${escapeHtml(item.regiao_nome || item.regiao || '-')}</div></div>
+                <div class="detail-item"><span class="detail-label">Município</span><div class="detail-value">${escapeHtml(item.municipio || '-')}</div></div>
                 <div class="detail-item"><span class="detail-label">Arquivo</span><div class="detail-value">${escapeHtml(item.nome_arquivo || '-')}</div></div>
                 <div class="detail-item"><span class="detail-label">Responsável</span><div class="detail-value">${escapeHtml(item.responsavel || 'Não informado')}</div></div>
                 <div class="detail-item"><span class="detail-label">CPF do responsável</span><div class="detail-value">${escapeHtml(item.cpf_responsavel || 'Não informado')}</div></div>
@@ -1558,7 +1576,7 @@
                 return;
             }
 
-            const headers = ['id', 'nome_arquivo', 'data_relatorio', 'status_upload', 'url_publica', 'caminho_remoto', 'responsavel', 'cpf_responsavel', 'data_geracao', 'data_upload', 'mensagem_erro'];
+            const headers = ['id', 'regiao', 'regiao_nome', 'municipio', 'nome_arquivo', 'data_relatorio', 'status_upload', 'url_publica', 'caminho_remoto', 'responsavel', 'cpf_responsavel', 'data_geracao', 'data_upload', 'mensagem_erro'];
             const csv = [
                 headers.join(';'),
                 ...rows.map(item => headers.map(key => `"${String(item[key] ?? '').replaceAll('"', '""')}"`).join(';'))
@@ -1581,7 +1599,8 @@
             return {
                 busca: els.busca.value || '',
                 data: els.data.value || '',
-                status: els.status.value || ''
+                status: els.status.value || '',
+                regiao: els.regiao.value || ''
             };
         }
 
@@ -1652,6 +1671,7 @@
             els.busca.value = '';
             els.data.value = '';
             els.status.value = '';
+            els.regiao.value = '';
             els.pageSize.value = '20';
             state.selectedIds.clear();
             carregar(1);
@@ -1663,7 +1683,7 @@
 
             els.tabelaBody.innerHTML = `
             <tr>
-                <td colspan="9">
+                <td colspan="10">
                     <div class="empty">
                         <div class="empty-icon">⏳</div>
                         <div>Carregando histórico...</div>
@@ -1696,7 +1716,7 @@
             } catch (error) {
                 els.tabelaBody.innerHTML = `
                 <tr>
-                    <td colspan="9">
+                    <td colspan="10">
                         <div class="empty">
                             <div class="empty-icon">⚠️</div>
                             <div><strong>Não foi possível carregar o histórico.</strong></div>
@@ -1725,6 +1745,13 @@
 
         els.pageSize.addEventListener('change', function () {
             carregar(1);
+        });
+
+        [els.data, els.status, els.regiao].forEach(el => {
+            el.addEventListener('change', function () {
+                state.selectedIds.clear();
+                carregar(1);
+            });
         });
 
         els.modal.addEventListener('click', function (e) {

@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS `tb_usuario` (
   `senha` varchar(255) NOT NULL,
   `inadmin` tinyint(1) NOT NULL DEFAULT '0',
   `dtregister` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `perfil` enum('ADMIN','SUPERVISOR','ASSESSOR') NOT NULL DEFAULT 'ASSESSOR',
+  `perfil` enum('ADMIN','SUPERVISOR','ASSESSOR','CONSULTA') NOT NULL DEFAULT 'ASSESSOR',
   `ativo` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`id_usuario`),
   UNIQUE KEY `uq_usuario_cpf` (`cpf`),
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS `tb_permissions` (
 
 CREATE TABLE IF NOT EXISTS `tb_profile_permissions` (
   `id_profile_permission` int NOT NULL AUTO_INCREMENT,
-  `perfil` enum('ADMIN','SUPERVISOR','ASSESSOR') NOT NULL,
+  `perfil` enum('ADMIN','SUPERVISOR','ASSESSOR','CONSULTA') NOT NULL,
   `id_permission` int NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id_profile_permission`),
@@ -64,21 +64,42 @@ CREATE TABLE IF NOT EXISTS `tb_access_denied` (
 
 CREATE TABLE IF NOT EXISTS `tb_userlogs` (
   `id_log` int NOT NULL AUTO_INCREMENT,
-  `id_usuario` int NOT NULL,
+  `id_usuario` int DEFAULT NULL,
   `cpf_usuario` varchar(14) NOT NULL,
   `nome_funcionario` varchar(255) NOT NULL,
   `acao` varchar(50) NOT NULL,
+  `categoria` varchar(60) DEFAULT NULL,
+  `severidade` varchar(20) DEFAULT NULL,
   `modulo` varchar(50) DEFAULT NULL,
+  `menu` varchar(120) DEFAULT NULL,
+  `sub_menu` varchar(120) DEFAULT NULL,
+  `entidade` varchar(100) DEFAULT NULL,
   `referencia_id` int DEFAULT NULL,
+  `registro_id` varchar(100) DEFAULT NULL,
   `detalhes` text,
+  `descricao` text,
+  `dados_anteriores` longtext,
+  `dados_novos` longtext,
+  `alteracoes` longtext,
+  `rota` varchar(255) DEFAULT NULL,
+  `metodo_http` varchar(12) DEFAULT NULL,
   `ip` varchar(45) NOT NULL,
   `user_agent` text NOT NULL,
+  `sessao_id` varchar(128) DEFAULT NULL,
+  `status` varchar(30) DEFAULT 'SUCCESS',
+  `erro` longtext,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id_log`),
   KEY `idx_userlogs_usuario` (`id_usuario`),
   KEY `idx_userlogs_acao` (`acao`),
+  KEY `idx_userlogs_categoria` (`categoria`),
+  KEY `idx_userlogs_modulo` (`modulo`),
+  KEY `idx_userlogs_entidade_registro` (`entidade`,`registro_id`),
+  KEY `idx_userlogs_status` (`status`),
+  KEY `idx_userlogs_severidade` (`severidade`),
+  KEY `idx_userlogs_ip` (`ip`),
   KEY `idx_userlogs_created_at` (`created_at`),
-  CONSTRAINT `fk_userlogs_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `tb_usuario` (`id_usuario`) ON DELETE RESTRICT ON UPDATE CASCADE
+  CONSTRAINT `fk_userlogs_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `tb_usuario` (`id_usuario`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `tb_permissions` (`permission_key`, `description`, `module_name`) VALUES
@@ -110,22 +131,8 @@ SELECT 'ASSESSOR', id_permission FROM tb_permissions WHERE permission_key IN (
   'DASHBOARD_VIEW','FUNCIONARIOS_VIEW'
 );
 
-INSERT INTO `tb_funcionario` (`id_pessoa`, `nome_funcionario`, `email`, `nrphone`, `ativo`) VALUES
-(1, 'Administrador do Sistema', 'admin@local.test', '92999999999', 1)
-ON DUPLICATE KEY UPDATE
-  nome_funcionario = VALUES(nome_funcionario),
-  email = VALUES(email),
-  nrphone = VALUES(nrphone),
-  ativo = VALUES(ativo);
-
-INSERT INTO `tb_usuario` (`id_usuario`, `id_pessoa`, `cpf`, `senha`, `inadmin`, `perfil`, `ativo`) VALUES
-(1, 1, '11144477735', '$2y$12$SHUyd8FWLM1m93HWK0uLf.6zu0tl3p2N7/L8a.aglUEU8He83jkCy', 1, 'ADMIN', 1)
-ON DUPLICATE KEY UPDATE
-  id_pessoa = VALUES(id_pessoa),
-  senha = VALUES(senha),
-  inadmin = VALUES(inadmin),
-  perfil = VALUES(perfil),
-  ativo = VALUES(ativo);
+-- Nenhum usuário é criado automaticamente. Cadastre o primeiro administrador
+-- com uma senha gerada por password_hash() em uma rotina administrativa segura.
 
 
 -- Permissão de exportação da planilha mensal

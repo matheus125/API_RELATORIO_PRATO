@@ -6,10 +6,13 @@ class UnidadesAtualizadasService
 {
     /** @var Sql */
     private $sql;
+    /** @var AccessScopeService */
+    private $scope;
 
-    public function __construct(Sql $sql)
+    public function __construct(Sql $sql, ?AccessScopeService $scope = null)
     {
         $this->sql = $sql;
+        $this->scope = $scope ?: new AccessScopeService($sql);
     }
 
     public function pesquisar(array $filtros = []): array
@@ -45,18 +48,22 @@ class UnidadesAtualizadasService
             $params[':status'] = $status;
         }
 
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $this->scope->baseConstraint('b', 'unidades_atualizadas'));
+
         $whereSql = count($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        $municipioSelect = $this->scope->columnExists('tb_bases_consulta', 'municipio') ? 'b.municipio' : 'NULL';
+        $tipoSelect = $this->scope->columnExists('tb_bases_consulta', 'tipo_unidade') ? "COALESCE(NULLIF(b.tipo_unidade, ''), 'Unidade de atendimento')" : "'Unidade de atendimento'";
 
         $rows = $this->sql->select("
             SELECT
                 b.id,
                 b.nome_unidade,
-                'Unidade de atendimento' AS tipo_unidade,
+                {$tipoSelect} AS tipo_unidade,
+                {$municipioSelect} AS municipio,
                 b.identificador,
                 b.nome_banco,
                 b.ultima_sincronizacao,
-                DATE_FORMAT(b.ultima_sincronizacao, '%d/%m/%Y') AS data_atualizacao,
-                DATE_FORMAT(b.ultima_sincronizacao, '%H:%i:%s') AS hora_atualizacao,
                 {$this->statusExpression()} AS status_unidade,
                 b.ultimo_status,
                 b.ultima_mensagem
@@ -117,11 +124,12 @@ class UnidadesAtualizadasService
             'id' => (int)($row['id'] ?? 0),
             'nome_unidade' => $row['nome_unidade'] ?? '-',
             'tipo_unidade' => $row['tipo_unidade'] ?? 'Unidade de atendimento',
+            'municipio' => $row['municipio'] ?? '',
             'identificador' => $row['identificador'] ?? '',
             'nome_banco' => $row['nome_banco'] ?? '',
-            'ultima_sincronizacao' => $row['ultima_sincronizacao'] ?? null,
-            'data_atualizacao' => $row['data_atualizacao'] ?: '-',
-            'hora_atualizacao' => $row['hora_atualizacao'] ?: '-',
+            'ultima_sincronizacao' => portal_format_manaus($row['ultima_sincronizacao'] ?? null),
+            'data_atualizacao' => portal_format_manaus($row['ultima_sincronizacao'] ?? null, 'd/m/Y'),
+            'hora_atualizacao' => portal_format_manaus($row['ultima_sincronizacao'] ?? null, 'H:i:s'),
             'status_unidade' => $status,
             'status_label' => $this->statusLabel($status),
             'status_class' => $this->statusClass($status),

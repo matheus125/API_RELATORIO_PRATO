@@ -21,6 +21,13 @@ $config = [
     'sftp_password' => (string)portal_env('UPDATE_PUBLISH_SFTP_PASSWORD', ''),
     'sftp_remote_dir' => rtrim((string)portal_env('UPDATE_PUBLISH_SFTP_REMOTE_DIR', ''), '/'),
     'php_cli_path' => (string)portal_env('PHP_CLI_PATH', 'php'),
+    'require_source_sync' => filter_var(portal_env('UPDATE_REQUIRE_SOURCE_SYNC', true), FILTER_VALIDATE_BOOLEAN),
+    'source_sync_dir' => STORAGE_DIR . DIRECTORY_SEPARATOR . 'source-sync',
+    'source_sync_backup_enabled' => filter_var(portal_env('UPDATE_SOURCE_SYNC_BACKUP_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+    'source_upload_token' => (string)portal_env('UPDATE_SOURCE_UPLOAD_TOKEN', ''),
+    'package_signing_enabled' => filter_var(portal_env('UPDATE_PACKAGE_SIGNING_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+    'package_signing_private_key' => (string)portal_env('UPDATE_PACKAGE_SIGNING_PRIVATE_KEY', STORAGE_DIR . DIRECTORY_SEPARATOR . 'keys' . DIRECTORY_SEPARATOR . 'update-package-private.pem'),
+    'package_signing_public_key' => (string)portal_env('UPDATE_PACKAGE_SIGNING_PUBLIC_KEY', STORAGE_DIR . DIRECTORY_SEPARATOR . 'keys' . DIRECTORY_SEPARATOR . 'update-package-public.pem'),
     'env_global_keys' => array_filter(array_map('trim', explode(',', (string)portal_env(
         'UPDATE_PUBLISH_ENV_KEYS',
         'SMTP_HOST,SMTP_PORT,SMTP_USER,SMTP_FROM_EMAIL,SMTP_FROM_NAME,SMTP_SECURE,UPDATE_MONITOR_URL,UPDATE_MONITOR_ADMIN_URL,PHP_CLI_PATH'

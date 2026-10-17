@@ -18,8 +18,13 @@ function authenticateUser() {
         exit;
     }
 
-    $token = str_replace("Bearer ", "", $headers['authorization']);
-    $secretKey = "chave_super_secreta";
+    $token = preg_replace('/^Bearer\s+/i', '', (string)$headers['authorization']);
+    $secretKey = function_exists('portal_env') ? trim((string)portal_env('JWT_SECRET', '')) : trim((string)getenv('JWT_SECRET'));
+    if ($secretKey === '') {
+        http_response_code(503);
+        echo json_encode(["error" => "Autenticação JWT não configurada."], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 
     try {
         $decoded = JWT::decode($token, new Key($secretKey, 'HS256'));

@@ -1,1 +1,111 @@
-<main class="app-main"><div class="app-content-header"><div class="container-fluid"><div class="portal-page-header"><div class="portal-kicker"><i class="bi bi-clock-history"></i> Trilhas de auditoria</div><h1 class="portal-page-title">Auditoria</h1><p class="portal-page-subtitle">Visualize os eventos mais recentes registrados no sistema com foco em rastreabilidade e segurança operacional.</p></div></div></div><div class="app-content"><div class="container-fluid"><div class="card"><div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"><h3 class="card-title mb-0">Últimos 300 registros</h3><span class="text-muted small">Eventos do sistema</span></div><div class="card-body p-0 table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>ID</th><th>Usuário</th><th>CPF</th><th>Ação</th><th>Módulo</th><th>Referência</th><th>IP</th><th>Data</th></tr></thead><tbody>{if="count($logs) > 0"}{loop="$logs"}<tr><td>{$value.id_log}</td><td><div class="fw-semibold">{$value.nome_funcionario}</div></td><td>{$value.cpf_usuario}</td><td><span class="badge badge-soft-primary rounded-pill px-3 py-2">{$value.acao}</span></td><td>{$value.modulo}</td><td>{$value.referencia_id}</td><td>{$value.ip}</td><td>{$value.created_at}</td></tr>{/loop}{else}<tr><td colspan="8" class="text-center text-muted py-4">Nenhum registro encontrado.</td></tr>{/if}</tbody></table></div></div></div></div></main>
+<main class="app-main">
+  <div class="app-content-header">
+    <div class="container-fluid">
+      <div class="portal-page-header">
+        <div class="portal-kicker"><i class="bi bi-clock-history"></i> Trilhas de auditoria</div>
+        <h1 class="portal-page-title">Auditoria</h1>
+        <p class="portal-page-subtitle">Consulte ações, acessos, alterações, falhas e downloads registrados no sistema.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-content">
+    <div class="container-fluid">
+      <form class="card mb-3" method="get" action="/admin/seguranca/auditoria">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Filtros</h3>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-2"><label class="form-label">Início</label><input type="date" class="form-control" name="inicio" value="{$filters.inicio}"></div>
+            <div class="col-md-2"><label class="form-label">Fim</label><input type="date" class="form-control" name="fim" value="{$filters.fim}"></div>
+            <div class="col-md-3"><label class="form-label">Usuário</label><input type="text" class="form-control" name="usuario" value="{$filters.usuario}"></div>
+            <div class="col-md-2"><label class="form-label">Login/CPF</label><input type="text" class="form-control" name="login" value="{$filters.login}"></div>
+            <div class="col-md-3"><label class="form-label">Categoria</label><input type="text" class="form-control" name="categoria" value="{$filters.categoria}" placeholder="UPDATE, DOWNLOAD, ACCESS"></div>
+            <div class="col-md-2"><label class="form-label">Ação</label><input type="text" class="form-control" name="acao" value="{$filters.acao}"></div>
+            <div class="col-md-2"><label class="form-label">Módulo</label><input type="text" class="form-control" name="modulo" value="{$filters.modulo}"></div>
+            <div class="col-md-2"><label class="form-label">Entidade</label><input type="text" class="form-control" name="entidade" value="{$filters.entidade}"></div>
+            <div class="col-md-2"><label class="form-label">Registro</label><input type="text" class="form-control" name="registro_id" value="{$filters.registro_id}"></div>
+            <div class="col-md-2"><label class="form-label">IP</label><input type="text" class="form-control" name="ip" value="{$filters.ip}"></div>
+            <div class="col-md-2"><label class="form-label">Status</label><input type="text" class="form-control" name="status" value="{$filters.status}"></div>
+            <div class="col-md-2"><label class="form-label">Severidade</label><input type="text" class="form-control" name="severidade" value="{$filters.severidade}"></div>
+            <div class="col-md-2"><label class="form-label">Por página</label><input type="number" class="form-control" name="pageSize" value="{$pagination.pageSize}" min="25" max="300"></div>
+          </div>
+        </div>
+        <div class="card-footer d-flex gap-2">
+          <button class="btn btn-primary" type="submit"><i class="bi bi-search me-1"></i> Filtrar</button>
+          <a class="btn btn-outline-secondary" href="/admin/seguranca/auditoria"><i class="bi bi-x-circle me-1"></i> Limpar</a>
+        </div>
+      </form>
+
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <h3 class="card-title mb-0">Histórico de registros</h3>
+          <span class="text-muted small">Mostrando {$pagination.from}-{$pagination.to} de {$pagination.total} registros</span>
+        </div>
+        <div class="card-body p-0 table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Data</th>
+                <th>Usuário</th>
+                <th>Categoria</th>
+                <th>Ação</th>
+                <th>Módulo</th>
+                <th>Entidade</th>
+                <th>Registro</th>
+                <th>Status</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {if="count($logs) > 0"}
+              {loop="$logs"}
+              <tr>
+                <td>{$value.id_log}</td>
+                <td class="text-nowrap">{$value.created_at}</td>
+                <td><div class="fw-semibold">{$value.nome_funcionario}</div><div class="text-muted small">{$value.cpf_usuario}</div></td>
+                <td><span class="badge badge-soft-primary rounded-pill px-3 py-2">{$value.categoria}</span><div class="text-muted small">{$value.severidade}</div></td>
+                <td><div class="fw-semibold">{$value.acao}</div><div class="text-muted small text-wrap" style="min-width:240px;">{$value.descricao}</div></td>
+                <td>{$value.modulo}</td>
+                <td>{$value.entidade}</td>
+                <td>{$value.registro_id}</td>
+                <td>{$value.status}</td>
+                <td>{$value.ip}</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td colspan="9">
+                  <details>
+                    <summary class="text-primary fw-semibold">Detalhes</summary>
+                    <div class="row g-3 mt-2">
+                      <div class="col-lg-4"><div class="text-muted small">Rota</div><code>{$value.metodo_http} {$value.rota}</code></div>
+                      <div class="col-lg-4"><div class="text-muted small">Sessão</div><code>{$value.sessao_id}</code></div>
+                      <div class="col-lg-4"><div class="text-muted small">Navegador/dispositivo</div><div class="small text-wrap">{$value.user_agent}</div></div>
+                      {if="$value.alteracoes_pretty != ''"}<div class="col-lg-12"><div class="fw-semibold mb-1">Alterações</div><pre class="bg-light border rounded p-2 small mb-0">{$value.alteracoes_pretty}</pre></div>{/if}
+                      {if="$value.dados_anteriores_pretty != ''"}<div class="col-lg-6"><div class="fw-semibold mb-1">Antes</div><pre class="bg-light border rounded p-2 small mb-0">{$value.dados_anteriores_pretty}</pre></div>{/if}
+                      {if="$value.dados_novos_pretty != ''"}<div class="col-lg-6"><div class="fw-semibold mb-1">Depois</div><pre class="bg-light border rounded p-2 small mb-0">{$value.dados_novos_pretty}</pre></div>{/if}
+                      {if="$value.erro_pretty != ''"}<div class="col-lg-12"><div class="fw-semibold mb-1 text-danger">Erro</div><pre class="bg-light border rounded p-2 small mb-0">{$value.erro_pretty}</pre></div>{/if}
+                    </div>
+                  </details>
+                </td>
+              </tr>
+              {/loop}
+              {else}
+              <tr><td colspan="10" class="text-center text-muted py-4">Nenhum registro encontrado.</td></tr>
+              {/if}
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div class="text-muted small">Página {$pagination.page} de {$pagination.pages}. Os registros antigos permanecem no histórico e podem ser acessados pela paginação ou filtros.</div>
+          <div class="d-flex gap-2">
+            {if="$pagination.prevUrl != ''"}<a class="btn btn-outline-secondary btn-sm" href="{$pagination.prevUrl}"><i class="bi bi-chevron-left me-1"></i> Anterior</a>{else}<button class="btn btn-outline-secondary btn-sm" type="button" disabled><i class="bi bi-chevron-left me-1"></i> Anterior</button>{/if}
+            {if="$pagination.nextUrl != ''"}<a class="btn btn-outline-secondary btn-sm" href="{$pagination.nextUrl}">Próxima <i class="bi bi-chevron-right ms-1"></i></a>{else}<button class="btn btn-outline-secondary btn-sm" type="button" disabled>Próxima <i class="bi bi-chevron-right ms-1"></i></button>{/if}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>

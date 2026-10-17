@@ -28,10 +28,12 @@ Projeto enxuto baseado na mesma estrutura do sistema original, mantendo:
 - Acessos negados
 - Auditoria
 
-## Credencial inicial
+## Primeiro acesso
 
-- CPF: `11144477735`
-- Senha: `admin123`
+Não há credencial administrativa fixa no código ou na documentação. Crie o
+primeiro usuário administrador diretamente no banco de dados com uma senha
+gerada por `password_hash()` e troque a senha imediatamente após o primeiro
+acesso. Nunca publique credenciais reais no repositório.
 
 ## Banco de dados
 

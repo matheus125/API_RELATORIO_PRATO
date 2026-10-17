@@ -40,6 +40,7 @@ class Sql
 		$this->conn->exec("SET NAMES utf8mb4");
 		$this->conn->exec("SET CHARACTER SET utf8mb4");
 		$this->conn->exec("SET SESSION collation_connection = utf8mb4_unicode_ci");
+		$this->conn->exec("SET time_zone = '+00:00'");
 		if ($queryTimeoutMs > 0) {
 			$this->applyQueryTimeout($queryTimeoutMs);
 		}
@@ -114,6 +115,7 @@ class Sql
 	{
 		$dir = defined('LOG_DIR') ? LOG_DIR : dirname(__DIR__, 5) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'logs';
 		if (!is_dir($dir)) @mkdir($dir, 0775, true);
-		@file_put_contents($dir . DIRECTORY_SEPARATOR . 'db-errors.log', '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL, FILE_APPEND);
+		$stamp = function_exists('portal_log_timestamp') ? \portal_log_timestamp() : gmdate('Y-m-d H:i:s') . ' UTC';
+		@file_put_contents($dir . DIRECTORY_SEPARATOR . 'db-errors.log', '[' . $stamp . '] ' . $message . PHP_EOL, FILE_APPEND);
 	}
 }

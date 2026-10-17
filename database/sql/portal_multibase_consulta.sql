@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS tb_cadastros_unificados (
     cpf VARCHAR(20) NULL,
     cpf_normalizado VARCHAR(20) NULL,
     rg VARCHAR(30) NULL,
+    telefone VARCHAR(30) NULL,
     data_nascimento DATE NULL,
     idade INT NULL,
     genero VARCHAR(20) NULL,

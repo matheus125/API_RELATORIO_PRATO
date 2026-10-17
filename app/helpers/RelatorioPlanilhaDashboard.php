@@ -2,48 +2,33 @@
 
 use Hcode\DB\Sql;
 use Hcode\Model\Funcionarios;
+use Hcode\Model\Notification;
 
 class RelatorioPlanilhaDashboard
 {
     /** @var Sql */
     protected $sql;
+    /** @var AccessScopeService */
+    protected $scope;
 
-    public function __construct(Sql $sql)
+    public function __construct(Sql $sql, ?AccessScopeService $scope = null)
     {
         $this->sql = $sql;
+        $this->scope = $scope ?: new AccessScopeService($sql);
     }
 
     public function canExport(): bool
     {
-        if (!Funcionarios::checkLogin()) {
-            return false;
-        }
-
-        try {
-            if (!$this->tableExists('tb_permissions')) {
-                return Funcionarios::hasPermission('DASHBOARD_VIEW');
-            }
-
-            $rows = $this->sql->select(
-                "SELECT COUNT(*) AS total FROM tb_permissions WHERE permission_key = :permission_key",
-                [':permission_key' => 'PLANILHA_EXPORT']
-            );
-
-            $exists = (int)($rows[0]['total'] ?? 0) > 0;
-            if (!$exists) {
-                return Funcionarios::hasPermission('DASHBOARD_VIEW');
-            }
-
-            return Funcionarios::hasPermission('PLANILHA_EXPORT');
-        } catch (Throwable $e) {
-            return Funcionarios::hasPermission('DASHBOARD_VIEW');
-        }
+        return Funcionarios::checkLogin()
+            && Funcionarios::hasPermission('PLANILHA_VIEW')
+            && Funcionarios::hasPermission('PLANILHA_EXPORT');
     }
 
-    public function getPainel(int $ano, int $mes, bool $somenteFechados = true): array
+    public function getPainel(int $ano, int $mes, bool $somenteFechados = true, string $regiao = ''): array
     {
         $totalDiasMes = cal_days_in_month(CAL_GREGORIAN, $mes, $ano);
-        $rows = $this->buscarRelatorios($ano, $mes, $somenteFechados);
+        $regiao = $this->scope->normalizeRegionCode($regiao);
+        $rows = $this->buscarRelatorios($ano, $mes, $somenteFechados, $regiao);
 
         $diasComRegistros = [];
         $diasFechados = [];
@@ -158,11 +143,12 @@ class RelatorioPlanilhaDashboard
                 'fechados' => $chartFechados,
             ],
             'ranking' => $ranking,
-            'historico' => $this->buscarHistoricoPlanilhas(8),
+            'historico' => $this->buscarHistoricoPlanilhas(8, $regiao),
             'meta' => [
                 'ano' => $ano,
                 'mes' => $mes,
                 'somente_fechados' => $somenteFechados,
+                'regiao' => $regiao,
                 'pode_exportar' => $this->canExport(),
             ],
         ];
@@ -188,8 +174,8 @@ class RelatorioPlanilhaDashboard
             'mensagem_erro' => $payload['mensagem_erro'] ?? null,
             'responsavel' => $payload['responsavel'] ?? null,
             'cpf_responsavel' => $payload['cpf_responsavel'] ?? null,
-            'data_geracao' => $payload['data_geracao'] ?? date('Y-m-d H:i:s'),
-            'data_upload' => $payload['data_upload'] ?? date('Y-m-d H:i:s'),
+            'data_geracao' => $payload['data_geracao'] ?? portal_utc_now(),
+            'data_upload' => $payload['data_upload'] ?? portal_utc_now(),
         ];
 
         $insertCols = [];
@@ -216,8 +202,15 @@ class RelatorioPlanilhaDashboard
 
         try {
             $this->sql->query($sql, $insertParams);
+            $idRows = $this->sql->select('SELECT LAST_INSERT_ID() AS id');
+            $relatorioId = isset($idRows[0]['id']) ? (int)$idRows[0]['id'] : null;
+            if ($relatorioId) {
+                $payload['id'] = $relatorioId;
+                $payload['status_upload'] = $map['status_upload'] ?? ($payload['status_upload'] ?? 'SUCESSO');
+                Notification::addReportNotification($payload);
+            }
         } catch (Throwable $e) {
-            // não quebra a exportação principal se o histórico falhar
+            $this->logErro('Falha ao registrar histórico/notificação da planilha: ' . $e->getMessage());
         }
     }
 
@@ -233,9 +226,13 @@ class RelatorioPlanilhaDashboard
             }
             if (!empty($select)) {
                 try {
+                    $where = ['id = :id'];
+                    $params = [':id' => $id];
+                    $where = $this->historicoArquivoWhere($where, $params);
+
                     $rows = $this->sql->select(
-                        'SELECT ' . implode(', ', $select) . ' FROM tb_relatorios_pdf WHERE id = :id LIMIT 1',
-                        [':id' => $id]
+                        'SELECT ' . implode(', ', $select) . ' FROM tb_relatorios_pdf WHERE ' . implode(' AND ', $where) . ' LIMIT 1',
+                        $params
                     );
                     if (!empty($rows[0])) {
                         $row = $rows[0];
@@ -255,7 +252,7 @@ class RelatorioPlanilhaDashboard
             }
         }
 
-        if ($file) {
+        if ($file && $this->scope->canViewAll()) {
             $path = $this->resolverCaminhoArquivo($file);
             if ($path && is_file($path)) {
                 return [
@@ -269,7 +266,7 @@ class RelatorioPlanilhaDashboard
         return null;
     }
 
-    protected function buscarRelatorios(int $ano, int $mes, bool $somenteFechados = true): array
+    protected function buscarRelatorios(int $ano, int $mes, bool $somenteFechados = true, string $regiao = ''): array
     {
         if (!$this->tableExists('tb_relatorios')) {
             return [];
@@ -295,11 +292,14 @@ class RelatorioPlanilhaDashboard
             $where[] = 'COALESCE(fechado, 0) = 1';
         }
 
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $this->scope->dataConstraint('tb_relatorios', 'tb_relatorios', 'planilha_relatorios'));
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $this->scope->regionConstraint('tb_relatorios', 'tb_relatorios', 'planilha_relatorios_regiao', $regiao));
+
         $sql = 'SELECT ' . implode(', ', $select) . ' FROM tb_relatorios WHERE ' . implode(' AND ', $where) . ' ORDER BY data ASC, nome_banco ASC';
         return $this->sql->select($sql, $params);
     }
 
-    protected function buscarHistoricoPlanilhas(int $limit = 8): array
+    protected function buscarHistoricoPlanilhas(int $limit = 8, string $regiao = ''): array
     {
         $items = [];
 
@@ -314,12 +314,16 @@ class RelatorioPlanilhaDashboard
 
             if (!empty($select) && in_array('nome_arquivo', $columns, true)) {
                 try {
+                    $where = ['nome_arquivo LIKE :xlsx'];
+                    $params = [':xlsx' => '%.xlsx'];
+                    [$where, $params] = $this->scope->appendConstraint($where, $params, $this->scope->dataConstraint('tb_relatorios_pdf', 'tb_relatorios_pdf', 'planilha_historico'));
+                    [$where, $params] = $this->scope->appendConstraint($where, $params, $this->scope->regionConstraint('tb_relatorios_pdf', 'tb_relatorios_pdf', 'planilha_historico_regiao', $regiao));
                     $sql = 'SELECT ' . implode(', ', $select) . "\n"
                         . "FROM tb_relatorios_pdf\n"
-                        . "WHERE nome_arquivo LIKE :xlsx\n"
+                        . "WHERE " . implode(' AND ', $where) . "\n"
                         . "ORDER BY " . (in_array('id', $columns, true) ? 'id' : 'nome_arquivo') . " DESC\n"
                         . 'LIMIT ' . (int)$limit;
-                    $items = $this->sql->select($sql, [':xlsx' => '%.xlsx']);
+                    $items = $this->sql->select($sql, $params);
                 } catch (Throwable $e) {
                     $items = [];
                 }
@@ -330,6 +334,12 @@ class RelatorioPlanilhaDashboard
             foreach ($items as &$item) {
                 $item['download_url'] = '/admin/api/relatorio/planilha/arquivo?id=' . (int)($item['id'] ?? 0);
                 $item['exists_local'] = (bool)$this->resolverCaminhoArquivo($item['caminho_remoto'] ?? $item['nome_arquivo'] ?? '');
+                if (!empty($item['data_geracao'])) {
+                    $item['data_geracao'] = portal_format_manaus($item['data_geracao']);
+                }
+                if (!empty($item['data_upload'])) {
+                    $item['data_upload'] = portal_format_manaus($item['data_upload']);
+                }
             }
             return $items;
         }
@@ -378,6 +388,17 @@ class RelatorioPlanilhaDashboard
         return is_file($path) ? $path : null;
     }
 
+    private function historicoArquivoWhere(array $where, array &$params): array
+    {
+        [$where, $params] = $this->scope->appendConstraint(
+            $where,
+            $params,
+            $this->scope->dataConstraint('tb_relatorios_pdf', 'tb_relatorios_pdf', 'planilha_arquivo')
+        );
+
+        return $where;
+    }
+
     protected function tableExists(string $table): bool
     {
         try {
@@ -398,5 +419,14 @@ class RelatorioPlanilhaDashboard
         } catch (Throwable $e) {
             return [];
         }
+    }
+
+    private function logErro(string $message): void
+    {
+        $dir = defined('LOG_DIR') ? LOG_DIR : (ROOT_DIR . '/storage/logs');
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        @file_put_contents($dir . DIRECTORY_SEPARATOR . 'relatorio-planilha.log', '[' . portal_log_timestamp() . '] ' . $message . PHP_EOL, FILE_APPEND);
     }
 }

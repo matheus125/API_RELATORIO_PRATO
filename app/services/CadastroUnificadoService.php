@@ -6,26 +6,38 @@ class CadastroUnificadoService
 {
     /** @var Sql */
     private $sql;
+    /** @var AccessScopeService */
+    private $scope;
 
-    public function __construct(Sql $sql)
+    public function __construct(Sql $sql, ?AccessScopeService $scope = null)
     {
         $this->sql = $sql;
+        $this->scope = $scope ?: new AccessScopeService($sql);
     }
 
     public function listBases(bool $onlyActive = false): array
     {
-        $where = $onlyActive ? 'WHERE ativo = 1' : '';
+        $where = $onlyActive ? ['ativo = 1'] : [];
+        $params = [];
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $this->scope->baseConstraint('tb_bases_consulta', 'bases_list'));
+        $whereSql = count($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
         return $this->sql->select("
             SELECT
                 id, nome_unidade, identificador, host, porta, nome_banco, usuario, ativo, ultima_sincronizacao, ultimo_status, ultima_mensagem
             FROM tb_bases_consulta
-            {$where}
+            {$whereSql}
             ORDER BY nome_unidade ASC, nome_banco ASC
-        ");
+        ", $params);
     }
 
     public function getResumo(): array
     {
+        $where = [];
+        $params = [];
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $this->scope->dataConstraint('tb_cadastros_unificados', 'tb_cadastros_unificados', 'cad_resumo'));
+        $whereSql = count($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
         $totais = $this->sql->select("
             SELECT
                 COUNT(*) AS total_registros,
@@ -33,31 +45,35 @@ class CadastroUnificadoService
                 SUM(CASE WHEN tipo_cadastro = 'TITULAR' THEN 1 ELSE 0 END) AS total_titulares,
                 SUM(CASE WHEN tipo_cadastro = 'DEPENDENTE' THEN 1 ELSE 0 END) AS total_dependentes
             FROM tb_cadastros_unificados
-        ");
+            {$whereSql}
+        ", $params);
 
         $atualizacao = $this->sql->select("
             SELECT MAX(data_sync) AS ultima_sync
             FROM tb_cadastros_unificados
-        ");
+            {$whereSql}
+        ", $params);
 
         return [
             'total_registros' => (int)($totais[0]['total_registros'] ?? 0),
             'total_bases' => (int)($totais[0]['total_bases'] ?? 0),
             'total_titulares' => (int)($totais[0]['total_titulares'] ?? 0),
             'total_dependentes' => (int)($totais[0]['total_dependentes'] ?? 0),
-            'ultima_sync' => $atualizacao[0]['ultima_sync'] ?? null,
+            'ultima_sync' => portal_format_manaus($atualizacao[0]['ultima_sync'] ?? null),
         ];
     }
 
     public function pesquisar(array $filtros): array
     {
         $page = max(1, (int)($filtros['page'] ?? 1));
-        $pageSize = max(1, min(100, (int)($filtros['pageSize'] ?? 25)));
+        $maxPageSize = max(1, min(50000, (int)($filtros['maxPageSize'] ?? 100)));
+        $pageSize = max(1, min($maxPageSize, (int)($filtros['pageSize'] ?? 25)));
         $offset = ($page - 1) * $pageSize;
 
         $busca = trim((string)($filtros['busca'] ?? ''));
         $tipo = strtoupper(trim((string)($filtros['tipo'] ?? '')));
         $origemBanco = trim((string)($filtros['origem_banco'] ?? ''));
+        $origemBancos = $this->normalizeBancoFilters($filtros['origem_bancos'] ?? []);
         $origemUnidade = trim((string)($filtros['origem_unidade'] ?? ''));
         $somenteAtivos = isset($filtros['somente_ativos']) ? ((int)$filtros['somente_ativos'] === 1) : false;
 
@@ -66,10 +82,17 @@ class CadastroUnificadoService
 
         if ($busca !== '') {
             $buscaCpf = preg_replace('/\D+/', '', $busca);
-            $where[] = "(nome LIKE :busca_nome OR cpf_normalizado LIKE :busca_cpf OR rg LIKE :busca_rg)";
+            $where[] = "(
+                nome LIKE :busca_nome
+                OR cpf_normalizado LIKE :busca_cpf
+                OR rg LIKE :busca_rg
+                OR telefone LIKE :busca_telefone
+                OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(telefone, ''), '(', ''), ')', ''), '-', ''), ' ', '') LIKE :busca_cpf
+            )";
             $params[':busca_nome'] = '%' . $busca . '%';
             $params[':busca_cpf'] = '%' . $buscaCpf . '%';
             $params[':busca_rg'] = '%' . $busca . '%';
+            $params[':busca_telefone'] = '%' . $busca . '%';
         }
 
         if (in_array($tipo, ['TITULAR', 'DEPENDENTE'], true)) {
@@ -77,7 +100,15 @@ class CadastroUnificadoService
             $params[':tipo'] = $tipo;
         }
 
-        if ($origemBanco !== '') {
+        if (!empty($origemBancos)) {
+            $placeholders = [];
+            foreach ($origemBancos as $i => $banco) {
+                $key = ':origem_banco_' . $i;
+                $placeholders[] = $key;
+                $params[$key] = $banco;
+            }
+            $where[] = 'origem_banco IN (' . implode(',', $placeholders) . ')';
+        } elseif ($origemBanco !== '') {
             $where[] = 'origem_banco = :origem_banco';
             $params[':origem_banco'] = $origemBanco;
         }
@@ -91,19 +122,28 @@ class CadastroUnificadoService
             $where[] = "(status_cliente IS NULL OR status_cliente = '' OR UPPER(status_cliente) IN ('ATIVO','ATIVA','1','SIM'))";
         }
 
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $this->scope->dataConstraint('tb_cadastros_unificados', 'tb_cadastros_unificados', 'cad_lista'));
+
         $whereSql = count($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
         $total = $this->sql->select("SELECT COUNT(*) AS total FROM tb_cadastros_unificados {$whereSql}", $params);
         $items = $this->sql->select("
             SELECT
-                id, origem_banco, origem_unidade, origem_tabela, origem_id, tipo_cadastro,
-                nome, cpf, cpf_normalizado, rg, data_nascimento, idade, genero,
+                id, id_base_consulta, origem_banco, origem_unidade, origem_tabela, origem_id, origem_titular_id, tipo_cadastro,
+                nome, cpf, cpf_normalizado, rg, telefone, data_nascimento, idade, genero,
                 status_cliente, parentesco, registration_date, registration_date_update, data_sync
             FROM tb_cadastros_unificados
             {$whereSql}
-            ORDER BY nome ASC, id DESC
+            ORDER BY origem_banco ASC, COALESCE(origem_titular_id, origem_id) ASC, tipo_cadastro DESC, nome ASC, id DESC
             LIMIT {$offset}, {$pageSize}
         ", $params);
+
+        foreach ($items as &$item) {
+            $item['registration_date'] = portal_format_manaus($item['registration_date'] ?? null);
+            $item['registration_date_update'] = portal_format_manaus($item['registration_date_update'] ?? null);
+            $item['data_sync'] = portal_format_manaus($item['data_sync'] ?? null);
+        }
+        unset($item);
 
         return [
             'page' => $page,
@@ -111,6 +151,20 @@ class CadastroUnificadoService
             'total' => (int)($total[0]['total'] ?? 0),
             'pages' => $pageSize > 0 ? (int)ceil(((int)($total[0]['total'] ?? 0)) / $pageSize) : 1,
             'items' => $items,
+        ];
+    }
+
+    public function exportar(array $filtros): array
+    {
+        $filtros['page'] = 1;
+        $filtros['pageSize'] = 50000;
+        $filtros['maxPageSize'] = 50000;
+        $resultado = $this->pesquisar($filtros);
+
+        return [
+            'total' => $resultado['total'],
+            'items' => $resultado['items'],
+            'limit' => 50000,
         ];
     }
 
@@ -171,9 +225,16 @@ class CadastroUnificadoService
 
     private function resolveBases(array $baseIds): array
     {
-        $baseIds = array_values(array_filter(array_map('intval', $baseIds), function ($id) {
+        $requestedBaseIds = array_values(array_filter(array_map('intval', $baseIds), function ($id) {
             return $id > 0;
         }));
+        $baseIds = $this->scope->filterRequestedBaseIds($requestedBaseIds);
+
+        if (!$this->scope->canViewAll() && !empty($requestedBaseIds) && empty($baseIds)) {
+            return [];
+        }
+
+        $scopeConstraint = $this->scope->baseConstraint('tb_bases_consulta', 'bases_sync');
 
         if (count($baseIds) > 0) {
             $params = [];
@@ -185,20 +246,44 @@ class CadastroUnificadoService
                 $params[$key] = $id;
             }
 
+            $where = ['ativo = 1', 'id IN (' . implode(',', $placeholders) . ')'];
+            [$where, $params] = $this->scope->appendConstraint($where, $params, $scopeConstraint);
+
             return $this->sql->select("
                 SELECT *
                 FROM tb_bases_consulta
-                WHERE ativo = 1 AND id IN (" . implode(',', $placeholders) . ")
+                WHERE " . implode(' AND ', $where) . "
                 ORDER BY nome_unidade ASC, nome_banco ASC
             ", $params);
         }
 
+        $where = ['ativo = 1'];
+        $params = [];
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $scopeConstraint);
+
         return $this->sql->select("
             SELECT *
             FROM tb_bases_consulta
-            WHERE ativo = 1
+            WHERE " . implode(' AND ', $where) . "
             ORDER BY nome_unidade ASC, nome_banco ASC
-        ");
+        ", $params);
+    }
+
+    private function normalizeBancoFilters($value): array
+    {
+        if (!is_array($value)) {
+            $value = explode(',', (string)$value);
+        }
+
+        $items = [];
+        foreach ($value as $item) {
+            $item = trim((string)$item);
+            if ($item !== '') {
+                $items[$item] = true;
+            }
+        }
+
+        return array_keys($items);
     }
 
     private function connectRemote(array $base): PDO
@@ -259,6 +344,17 @@ class CadastroUnificadoService
         return ((int)($row['total'] ?? 0)) > 0;
     }
 
+    private function remotePhoneExpression(PDO $pdo, string $dbName, string $table): string
+    {
+        foreach (['telefone', 'celular', 'fone', 'whatsapp', 'contato', 'nrphone'] as $column) {
+            if ($this->remoteColumnExists($pdo, $dbName, $table, $column)) {
+                return $column . ' AS telefone';
+            }
+        }
+
+        return 'NULL AS telefone';
+    }
+
     private function fetchRemoteTitulares(PDO $pdo, array $base): array
     {
         $campos = [
@@ -266,6 +362,7 @@ class CadastroUnificadoService
             $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_titular', 'nome_completo') ? 'nome_completo' : 'NULL AS nome_completo',
             $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_titular', 'cpf') ? 'cpf' : 'NULL AS cpf',
             $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_titular', 'rg') ? 'rg' : 'NULL AS rg',
+            $this->remotePhoneExpression($pdo, $base['nome_banco'], 'tb_titular'),
             $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_titular', 'data_nascimento') ? 'data_nascimento' : 'NULL AS data_nascimento',
             $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_titular', 'idade') ? 'idade' : 'NULL AS idade',
             $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_titular', 'genero') ? 'genero' : 'NULL AS genero',
@@ -279,15 +376,18 @@ class CadastroUnificadoService
 
         return array_map(function ($row) use ($base) {
             return [
+                'id_base_consulta' => (int)$base['id'],
                 'origem_banco' => $base['nome_banco'],
                 'origem_unidade' => $base['nome_unidade'],
                 'origem_tabela' => 'tb_titular',
                 'origem_id' => (int)$row['id'],
+                'origem_titular_id' => null,
                 'tipo_cadastro' => 'TITULAR',
                 'nome' => $row['nome_completo'] ?? null,
                 'cpf' => $row['cpf'] ?? null,
                 'cpf_normalizado' => preg_replace('/\D+/', '', (string)($row['cpf'] ?? '')),
                 'rg' => $row['rg'] ?? null,
+                'telefone' => $row['telefone'] ?? null,
                 'data_nascimento' => $this->normalizeDate($row['data_nascimento'] ?? null),
                 'idade' => $row['idade'] !== null ? (int)$row['idade'] : null,
                 'genero' => $row['genero'] ?? null,
@@ -310,9 +410,11 @@ class CadastroUnificadoService
 
         $campos = [
             'id',
+            $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_dependentes', 'id_titular') ? 'id_titular' : 'NULL AS id_titular',
             $nomeExpr,
             $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_dependentes', 'cpf') ? 'cpf' : 'NULL AS cpf',
             $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_dependentes', 'rg') ? 'rg' : 'NULL AS rg',
+            $this->remotePhoneExpression($pdo, $base['nome_banco'], 'tb_dependentes'),
             $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_dependentes', 'data_nascimento') ? 'data_nascimento' : 'NULL AS data_nascimento',
             $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_dependentes', 'Idade') ? 'Idade AS idade' : ($this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_dependentes', 'idade') ? 'idade' : 'NULL AS idade'),
             $this->remoteColumnExists($pdo, $base['nome_banco'], 'tb_dependentes', 'genero') ? 'genero' : 'NULL AS genero',
@@ -326,15 +428,18 @@ class CadastroUnificadoService
 
         return array_map(function ($row) use ($base) {
             return [
+                'id_base_consulta' => (int)$base['id'],
                 'origem_banco' => $base['nome_banco'],
                 'origem_unidade' => $base['nome_unidade'],
                 'origem_tabela' => 'tb_dependentes',
                 'origem_id' => (int)$row['id'],
+                'origem_titular_id' => $row['id_titular'] !== null ? (int)$row['id_titular'] : null,
                 'tipo_cadastro' => 'DEPENDENTE',
                 'nome' => $row['nome'] ?? null,
                 'cpf' => $row['cpf'] ?? null,
                 'cpf_normalizado' => preg_replace('/\D+/', '', (string)($row['cpf'] ?? '')),
                 'rg' => $row['rg'] ?? null,
+                'telefone' => $row['telefone'] ?? null,
                 'data_nascimento' => $this->normalizeDate($row['data_nascimento'] ?? null),
                 'idade' => $row['idade'] !== null ? (int)$row['idade'] : null,
                 'genero' => $row['genero'] ?? null,
@@ -352,21 +457,24 @@ class CadastroUnificadoService
         foreach ($items as $item) {
             $this->sql->query("
                 INSERT INTO tb_cadastros_unificados (
-                    origem_banco, origem_unidade, origem_tabela, origem_id, tipo_cadastro,
-                    nome, cpf, cpf_normalizado, rg, data_nascimento, idade, genero,
+                    id_base_consulta, origem_banco, origem_unidade, origem_tabela, origem_id, origem_titular_id, tipo_cadastro,
+                    nome, cpf, cpf_normalizado, rg, telefone, data_nascimento, idade, genero,
                     status_cliente, parentesco, registration_date, registration_date_update, data_sync
                 ) VALUES (
-                    :origem_banco, :origem_unidade, :origem_tabela, :origem_id, :tipo_cadastro,
-                    :nome, :cpf, :cpf_normalizado, :rg, :data_nascimento, :idade, :genero,
-                    :status_cliente, :parentesco, :registration_date, :registration_date_update, NOW()
+                    :id_base_consulta, :origem_banco, :origem_unidade, :origem_tabela, :origem_id, :origem_titular_id, :tipo_cadastro,
+                    :nome, :cpf, :cpf_normalizado, :rg, :telefone, :data_nascimento, :idade, :genero,
+                    :status_cliente, :parentesco, :registration_date, :registration_date_update, UTC_TIMESTAMP()
                 )
                 ON DUPLICATE KEY UPDATE
+                    id_base_consulta = VALUES(id_base_consulta),
                     origem_unidade = VALUES(origem_unidade),
+                    origem_titular_id = VALUES(origem_titular_id),
                     tipo_cadastro = VALUES(tipo_cadastro),
                     nome = VALUES(nome),
                     cpf = VALUES(cpf),
                     cpf_normalizado = VALUES(cpf_normalizado),
                     rg = VALUES(rg),
+                    telefone = VALUES(telefone),
                     data_nascimento = VALUES(data_nascimento),
                     idade = VALUES(idade),
                     genero = VALUES(genero),
@@ -374,17 +482,20 @@ class CadastroUnificadoService
                     parentesco = VALUES(parentesco),
                     registration_date = VALUES(registration_date),
                     registration_date_update = VALUES(registration_date_update),
-                    data_sync = NOW()
+                    data_sync = UTC_TIMESTAMP()
             ", [
+                ':id_base_consulta' => isset($item['id_base_consulta']) ? (int)$item['id_base_consulta'] : null,
                 ':origem_banco' => $item['origem_banco'],
                 ':origem_unidade' => $item['origem_unidade'],
                 ':origem_tabela' => $item['origem_tabela'],
                 ':origem_id' => $item['origem_id'],
+                ':origem_titular_id' => $item['origem_titular_id'] ?? null,
                 ':tipo_cadastro' => $item['tipo_cadastro'],
                 ':nome' => $item['nome'],
                 ':cpf' => $item['cpf'],
                 ':cpf_normalizado' => $item['cpf_normalizado'],
                 ':rg' => $item['rg'],
+                ':telefone' => $item['telefone'] ?? null,
                 ':data_nascimento' => $item['data_nascimento'],
                 ':idade' => $item['idade'],
                 ':genero' => $item['genero'],
@@ -416,7 +527,7 @@ class CadastroUnificadoService
 
         $this->sql->query("
             UPDATE tb_bases_consulta
-            SET ultima_sincronizacao = NOW(), ultimo_status = :status, ultima_mensagem = :mensagem
+            SET ultima_sincronizacao = UTC_TIMESTAMP(), ultimo_status = :status, ultima_mensagem = :mensagem
             WHERE id = :id
         ", [
             ':id' => $baseId,
@@ -426,7 +537,7 @@ class CadastroUnificadoService
 
         $this->sql->query("
             INSERT INTO tb_bases_consulta_sync_log (id_base, status_execucao, mensagem, data_execucao)
-            VALUES (:id_base, :status_execucao, :mensagem, NOW())
+            VALUES (:id_base, :status_execucao, :mensagem, UTC_TIMESTAMP())
         ", [
             ':id_base' => $baseId,
             ':status_execucao' => strtoupper($status),
@@ -443,14 +554,21 @@ class CadastroUnificadoService
         $value = trim((string)$date);
 
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
-            return $value;
+            [$year, $month, $day] = array_map('intval', explode('-', $value));
+            return ($year >= 1900 && checkdate($month, $day, $year)) ? $value : null;
         }
 
         if (preg_match('/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/', $value)) {
-            return substr($value, 0, 10);
+            $date = substr($value, 0, 10);
+            [$year, $month, $day] = array_map('intval', explode('-', $date));
+            return ($year >= 1900 && checkdate($month, $day, $year)) ? $date : null;
         }
 
         if (preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $value)) {
+            [$day, $month, $year] = array_map('intval', explode('/', $value));
+            if ($year < 1900 || !checkdate($month, $day, $year)) {
+                return null;
+            }
             $dt = DateTime::createFromFormat('d/m/Y', $value);
             return $dt instanceof DateTime ? $dt->format('Y-m-d') : null;
         }

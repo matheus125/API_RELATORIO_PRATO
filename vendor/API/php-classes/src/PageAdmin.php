@@ -36,7 +36,8 @@ class PageAdmin extends Page
                 'currentProfile' => $usuario->getperfil() ?: '',
                 'perfil_usuario' => $usuario->getperfil() ?: '',
                 'currentPermissions' => Funcionarios::getPermissions(),
-                'acl_permissions' => $_SESSION['acl_permissions'] ?? Funcionarios::getPermissions()
+                'acl_permissions' => $_SESSION['acl_permissions'] ?? Funcionarios::getPermissions(),
+                'csrf_token' => function_exists('portal_csrf_token') ? portal_csrf_token() : '',
             ], $data);
         } else {
             $opts['data'] = $data;

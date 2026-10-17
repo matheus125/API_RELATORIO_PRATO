@@ -28,6 +28,11 @@ class CentralUpdatePublishService
 
     public function currentVersion(): string
     {
+        $dbVersion = $this->latestDatabaseVersion();
+        if ($dbVersion !== '') {
+            return $dbVersion;
+        }
+
         $paths = [
             $this->updatesDir . DIRECTORY_SEPARATOR . 'version.json',
         ];
@@ -44,6 +49,27 @@ class CentralUpdatePublishService
         return '0.0.0';
     }
 
+    public function suggestNextVersion(): string
+    {
+        $version = $this->currentVersion();
+        if ($version === '' || $version === '0.0.0') {
+            $version = '1.000';
+        }
+
+        $candidate = $this->incrementVersion($version);
+        $guard = 0;
+        while ($this->versionExists($candidate) && $guard < 1000) {
+            $candidate = $this->incrementVersion($candidate);
+            $guard++;
+        }
+
+        if ($guard >= 1000) {
+            throw new Exception('Nao foi possivel encontrar uma versao livre automaticamente.');
+        }
+
+        return $candidate;
+    }
+
     public function preview(): array
     {
         $this->requireSourceRoot();
@@ -52,21 +78,32 @@ class CentralUpdatePublishService
         $ignored = [];
         $includedMap = [];
         $preflight = $this->buildPreflightReport(false);
+        $previousManifest = $this->latestManifest();
 
         foreach ($this->detectChangedFiles() as $file) {
+            $file = $this->normalizeDetectedFile($file, $previousManifest);
             $reason = $this->ignoreReason($file['path']);
             if ($reason !== '') {
                 $file['reason'] = $reason;
+                $file['include'] = false;
                 $ignored[] = $file;
                 continue;
             }
 
             if (!is_file($this->path($file['path']))) {
-                $file['reason'] = 'arquivo removido ou inexistente';
-                $ignored[] = $file;
+                if (($file['status_type'] ?? '') === 'removed') {
+                    $file['include'] = false;
+                    $file['reason'] = 'arquivo removido sera registrado no manifesto';
+                    $ignored[] = $file;
+                } else {
+                    $file['reason'] = 'arquivo removido ou inexistente';
+                    $file['include'] = false;
+                    $ignored[] = $file;
+                }
                 continue;
             }
 
+            $file['include'] = true;
             $included[] = $file;
             $includedMap[$file['path']] = true;
         }
@@ -75,7 +112,9 @@ class CentralUpdatePublishService
         $critical = $this->criticalClassesStatus();
         foreach ($critical['found'] as $path) {
             if (!isset($includedMap[$path])) {
-                $included[] = ['path' => $path, 'status' => 'classe'];
+                $file = $this->normalizeDetectedFile(['path' => $path, 'status' => 'classe'], $previousManifest);
+                $file['include'] = true;
+                $included[] = $file;
                 $includedMap[$path] = true;
             }
         }
@@ -85,7 +124,9 @@ class CentralUpdatePublishService
 
         foreach ($required['found'] as $path) {
             if (!isset($includedMap[$path])) {
-                $included[] = ['path' => $path, 'status' => 'obrigatorio'];
+                $file = $this->normalizeDetectedFile(['path' => $path, 'status' => 'obrigatorio'], $previousManifest);
+                $file['include'] = true;
+                $included[] = $file;
                 $includedMap[$path] = true;
             }
         }
@@ -98,11 +139,17 @@ class CentralUpdatePublishService
         return [
             'current_version' => $this->currentVersion(),
             'source_root' => $this->sourceRoot,
+            'source_audit' => $this->sourceAudit(),
             'included' => $included,
             'ignored' => $ignored,
             'required' => $required,
             'critical_classes' => $critical,
             'preflight' => $preflight,
+            'previous_manifest' => $previousManifest ? [
+                'version' => (string)($previousManifest['version'] ?? ''),
+                'published_at' => (string)($previousManifest['published_at'] ?? ''),
+                'files_total' => isset($previousManifest['files']) && is_array($previousManifest['files']) ? count($previousManifest['files']) : 0,
+            ] : null,
             'total_included' => count($included),
             'total_ignored' => count($ignored),
         ];
@@ -170,12 +217,24 @@ class CentralUpdatePublishService
         }
 
         $this->ensureVersionDoesNotExist($version);
+        $this->log('PUBLICACAO inicio | versao=' . $version . ' | usuario=' . $this->currentUserLabel());
         $this->validatePhpFiles($preview['included']);
-        $zip = $this->createZip($zipPath, $preview['included']);
+        $manifest = $this->buildUpdateManifest($version, $changelog, $zipName, $preview);
+        $zip = $this->createZip($zipPath, $preview['included'], $manifest);
+        $manifest['package']['size'] = $zip['size'];
+        $manifest['package']['sha256'] = $zip['sha256'];
+        $manifest['package']['path'] = $zipPath;
+        $manifest['package']['url'] = $this->downloadUrl($zipName);
+        $signature = $this->signPackage($zipPath, $zipName, $zip['sha256'], (int)$zip['size']);
+        if (!empty($signature['enabled'])) {
+            $manifest['package']['signature'] = $signature;
+        }
+        $this->writeManifestFile($version, $manifest);
         $this->validateZipRequiredFiles($zipPath, $preview['required']['found']);
+        $postValidation = $this->validatePublishedZip($zipPath, $preview['included'], $manifest, $zip['sha256']);
 
         $url = $this->downloadUrl($zipName);
-        $jsonData = $this->buildVersionJson($version, $zipName, $url, $changelog, $zip['sha256']);
+        $jsonData = $this->buildVersionJson($version, $zipName, $url, $changelog, $zip['sha256'], $zip['size'], $signature);
         $backups = $this->backupVersionFiles($version);
 
         $zipUpload = ['success' => false];
@@ -187,8 +246,11 @@ class CentralUpdatePublishService
 
             $uploads = $this->uploadFiles([
                 ['path' => $zipPath, 'name' => $zipName],
+                ['path' => (string)($signature['signature_path'] ?? ''), 'name' => basename((string)($signature['signature_path'] ?? ''))],
+                ['path' => (string)($signature['public_key_path'] ?? ''), 'name' => basename((string)($signature['public_key_path'] ?? ''))],
                 ['path' => $this->updatesDir . DIRECTORY_SEPARATOR . 'version.json', 'name' => 'version.json'],
                 ['path' => $this->updatesDir . DIRECTORY_SEPARATOR . 'version-lite.json', 'name' => 'version-lite.json'],
+                ['path' => $this->manifestPath($version), 'name' => 'manifest-v' . $version . '.json'],
             ]);
             $zipUpload = $uploads[$zipName] ?? ['success' => true];
             $jsonStatus['remote'] = true;
@@ -208,6 +270,7 @@ class CentralUpdatePublishService
             'zip_path' => $zipPath,
             'zip_size' => $zip['size'],
             'sha256' => $zip['sha256'],
+            'signature' => $signature,
             'url' => $url,
             'included' => $preview['included'],
             'ignored' => $preview['ignored'],
@@ -215,8 +278,15 @@ class CentralUpdatePublishService
             'json_status' => $jsonStatus,
             'json_backups' => $backups,
             'preflight' => $preflight,
+            'manifest' => [
+                'path' => $this->manifestPath($version),
+                'url' => $this->downloadBaseUrl() . '/manifest-v' . rawurlencode($version) . '.json',
+                'files_total' => count($manifest['files']),
+            ],
+            'post_validation' => $postValidation,
         ];
         $this->log('SUCESSO publicacao versao=' . $version . ' | zip=' . $zipName . ' | url=' . $url);
+        $this->logPublicationAudit($result);
         return $result;
     }
 
@@ -245,6 +315,86 @@ class CentralUpdatePublishService
             return strcmp($a['path'], $b['path']);
         });
         return $files;
+    }
+
+    private function normalizeDetectedFile(array $file, ?array $previousManifest = null): array
+    {
+        $path = $this->normalizeRelativePath((string)($file['path'] ?? ''));
+        $status = trim((string)($file['status'] ?? ''));
+        $fullPath = $path !== '' ? $this->path($path) : '';
+        $exists = $path !== '' && is_file($fullPath);
+        $hash = $exists ? hash_file('sha256', $fullPath) : '';
+        $size = $exists ? (int)filesize($fullPath) : 0;
+        $mtime = $exists ? portal_format_manaus(filemtime($fullPath)) : '';
+        $previous = $this->previousManifestFile($previousManifest, $path);
+        $statusType = $this->statusType($status, $exists, $previous, $hash);
+
+        return array_merge($file, array(
+            'path' => $path,
+            'status' => $status !== '' ? $status : $statusType,
+            'status_type' => $statusType,
+            'exists' => $exists,
+            'include' => false,
+            'size' => $size,
+            'size_human' => $this->formatBytes($size),
+            'sha256' => $hash,
+            'mtime' => $mtime,
+            'previous_sha256' => is_array($previous) ? (string)($previous['sha256'] ?? '') : '',
+            'previous_size' => is_array($previous) ? (int)($previous['size'] ?? 0) : 0,
+        ));
+    }
+
+    private function normalizeRelativePath(string $path): string
+    {
+        $path = str_replace('\\', '/', trim($path, "\"' \t\r\n"));
+        $path = preg_replace('#/+#', '/', $path);
+        return ltrim((string)$path, '/');
+    }
+
+    private function formatBytes(int $bytes): string
+    {
+        if ($bytes >= 1048576) {
+            return number_format($bytes / 1048576, 2, ',', '.') . ' MB';
+        }
+        if ($bytes >= 1024) {
+            return number_format($bytes / 1024, 2, ',', '.') . ' KB';
+        }
+        return $bytes . ' B';
+    }
+
+    private function statusType(string $gitStatus, bool $exists, ?array $previous, string $hash): string
+    {
+        $status = strtoupper(str_replace(' ', '', $gitStatus));
+        if (!$exists || strpos($status, 'D') !== false) {
+            return 'removed';
+        }
+        if (strpos($status, '??') !== false || strpos($status, 'A') !== false || $previous === null) {
+            return 'new';
+        }
+        $oldHash = (string)($previous['sha256'] ?? '');
+        if ($oldHash !== '' && $hash !== '' && !hash_equals($oldHash, $hash)) {
+            return 'modified';
+        }
+        if (strpos($status, 'M') !== false || strpos($status, 'R') !== false || strpos($status, 'C') !== false) {
+            return 'modified';
+        }
+        if ($gitStatus === 'obrigatorio' || $gitStatus === 'classe') {
+            return 'required';
+        }
+        return 'unchanged';
+    }
+
+    private function previousManifestFile(?array $manifest, string $path): ?array
+    {
+        if (!$manifest || empty($manifest['files']) || !is_array($manifest['files'])) {
+            return null;
+        }
+        foreach ($manifest['files'] as $file) {
+            if (isset($file['path']) && $this->normalizeRelativePath((string)$file['path']) === $path) {
+                return is_array($file) ? $file : null;
+            }
+        }
+        return null;
     }
 
     private function hasSourceRoot(): bool
@@ -284,6 +434,8 @@ class CentralUpdatePublishService
         }
 
         $critical = $this->criticalClassesStatus();
+        $dashboardFixes = $this->adminDashboardFixStatus();
+        $sourceSync = $this->sourceSyncPreflight();
         $checks = array(
             array(
                 'key' => 'git_tracked',
@@ -304,19 +456,35 @@ class CentralUpdatePublishService
                 'message' => empty($critical['missing']) ? 'Classes chamadas por rotas/services localizadas.' : 'Ha classes chamadas sem arquivo fisico.'
             ),
             array(
+                'key' => 'admin_dashboard_fixes',
+                'label' => 'Correcoes do admin presentes',
+                'ok' => empty($dashboardFixes['missing']),
+                'message' => empty($dashboardFixes['missing'])
+                    ? 'A arvore fonte contem as correcoes de JSON, /admin/api e cache de views.'
+                    : 'A arvore fonte do prato_web esta desatualizada: ' . implode(', ', $dashboardFixes['missing'])
+            ),
+            array(
                 'key' => 'env_protected',
                 'label' => '.env protegido',
                 'ok' => true,
                 'message' => '.env e variacoes locais continuam bloqueados pelo empacotador.'
+            ),
+            array(
+                'key' => 'source_sync',
+                'label' => 'Fonte sincronizada e auditavel',
+                'ok' => !empty($sourceSync['success']),
+                'message' => (string)($sourceSync['message'] ?? 'Status da sincronizacao indisponivel.')
             )
         );
 
         $report = array(
-            'success' => empty($blocked) && empty($critical['missing']),
+            'success' => empty($blocked) && empty($critical['missing']) && empty($dashboardFixes['missing']) && !empty($sourceSync['success']),
             'blocked' => $blocked,
             'trees' => $reports,
             'checks' => $checks,
-            'critical_classes' => $critical
+            'critical_classes' => $critical,
+            'admin_dashboard_fixes' => $dashboardFixes,
+            'source_sync' => $sourceSync
         );
 
         $this->logPreflight($report, $throwOnBlock ? 'publish' : 'preview');
@@ -333,7 +501,54 @@ class CentralUpdatePublishService
             throw new Exception('Publicacao bloqueada: classes criticas ausentes: ' . implode(', ', $critical['missing']));
         }
 
+        if ($throwOnBlock && !empty($dashboardFixes['missing'])) {
+            throw new Exception(
+                'Publicacao bloqueada: a copia fonte do prato_web usada pelo publicador esta desatualizada. ' .
+                'Pendencias: ' . implode(', ', $dashboardFixes['missing'])
+            );
+        }
+
+        if ($throwOnBlock && empty($sourceSync['success'])) {
+            throw new Exception('Publicacao bloqueada: sincronize a fonte oficial do prato_web antes de publicar. ' . (string)($sourceSync['message'] ?? ''));
+        }
+
         return $report;
+    }
+
+    private function sourceSyncPreflight(): array
+    {
+        if (empty($this->config['require_source_sync'])) {
+            return array(
+                'success' => true,
+                'message' => 'Validacao de sincronizacao desativada por configuracao.',
+                'required' => false
+            );
+        }
+
+        $path = __DIR__ . DIRECTORY_SEPARATOR . 'SourceSyncService.php';
+        if (!class_exists('SourceSyncService') && is_file($path)) {
+            require_once $path;
+        }
+
+        if (!class_exists('SourceSyncService')) {
+            return array(
+                'success' => false,
+                'message' => 'Servico de sincronizacao da fonte nao encontrado.',
+                'required' => true
+            );
+        }
+
+        try {
+            $service = new SourceSyncService($this->config);
+            return $service->validateForPublish();
+        } catch (Throwable $e) {
+            $this->log('WARN source sync preflight falhou: ' . $e->getMessage());
+            return array(
+                'success' => false,
+                'message' => 'Falha ao validar sincronizacao da fonte: ' . $e->getMessage(),
+                'required' => true
+            );
+        }
     }
 
     private function scanUntrackedCriticalPhp($name, $root): array
@@ -555,8 +770,13 @@ class CentralUpdatePublishService
     private function requiredFiles(): array
     {
         $required = [
+            'admin.php',
             'public/index.php', 'config/env.php', 'config/php-compat.php',
+            'app/helpers/view-cache.php',
+            'app/routes/admin.php',
+            'app/routes/admin-relatorio.php',
             'app/routes/admin-clientes.php', 'app/routes/admin-funcionarios.php',
+            'app/views/admin/header.html', 'app/views/admin/footer.html', 'app/views/admin/index.html',
             'app/views/admin/clientes.html', 'app/views/admin/clientes-update.html',
             'app/views/admin/clientes-vulnerabilidade-update.html',
             'app/views/admin/funcionarios.html', 'app/views/admin/funcionarios-create.html',
@@ -579,6 +799,116 @@ class CentralUpdatePublishService
             is_file($this->path($file)) ? $found[] = $file : $missing[] = $file;
         }
         return ['found' => $found, 'missing' => $missing];
+    }
+
+    private function sourceAudit(): array
+    {
+        $audit = array(
+            'root' => $this->sourceRoot ?: '',
+            'available' => $this->hasSourceRoot(),
+            'git_head' => '',
+            'git_branch' => '',
+            'git_status_count' => 0,
+            'files' => array()
+        );
+
+        if (!$this->hasSourceRoot()) {
+            return $audit;
+        }
+
+        if ($this->hasGitMetadata($this->sourceRoot)) {
+            $head = $this->runProcess('git -C ' . escapeshellarg($this->sourceRoot) . ' log -1 --format=%H', 10);
+            $branch = $this->runProcess('git -C ' . escapeshellarg($this->sourceRoot) . ' rev-parse --abbrev-ref HEAD', 10);
+            $status = $this->runProcess('git -C ' . escapeshellarg($this->sourceRoot) . ' status --porcelain', 10);
+            $audit['git_head'] = trim($head['stdout']);
+            $audit['git_branch'] = trim($branch['stdout']);
+            $audit['git_status_count'] = $status['stdout'] === '' ? 0 : count(preg_split('/\r\n|\r|\n/', trim($status['stdout'])));
+        }
+
+        foreach ($this->auditProbeFiles() as $file) {
+            $path = $this->path($file);
+            $audit['files'][] = array(
+                'path' => $file,
+                'exists' => is_file($path),
+                'mtime' => is_file($path) ? portal_format_manaus(filemtime($path)) : '',
+                'sha256' => is_file($path) ? hash_file('sha256', $path) : ''
+            );
+        }
+
+        return $audit;
+    }
+
+    private function auditProbeFiles(): array
+    {
+        return array(
+            'app/views/admin/footer.html',
+            'app/views/admin/header.html',
+            'app/views/admin/index.html',
+            'app/routes/admin.php',
+            'app/routes/admin-relatorio.php',
+            'app/helpers/view-cache.php',
+            'app/core/Hcode/Page.php'
+        );
+    }
+
+    private function adminDashboardFixStatus(): array
+    {
+        $checks = array(
+            array(
+                'file' => 'app/views/admin/footer.html',
+                'pattern' => "/fetchJson\\('\\/admin\\/api\\/total-titulares'\\)/",
+                'label' => 'footer.html usando /admin/api/total-titulares'
+            ),
+            array(
+                'file' => 'app/views/admin/footer.html',
+                'pattern' => "/fetchJson\\('\\/admin\\/api\\/usuarios-titulares'\\)/",
+                'label' => 'footer.html usando /admin/api/usuarios-titulares'
+            ),
+            array(
+                'file' => 'app/views/admin/header.html',
+                'pattern' => '/legacyApiAliases/',
+                'label' => 'header.html com aliases de API antiga'
+            ),
+            array(
+                'file' => 'app/views/admin/header.html',
+                'pattern' => '/Response\\.prototype\\.json/',
+                'label' => 'header.html com protecao de JSON vazio'
+            ),
+            array(
+                'file' => 'app/helpers/view-cache.php',
+                'pattern' => '/PC_VIEW_CACHE_SIGNATURE/',
+                'label' => 'view-cache.php com assinatura de cache'
+            ),
+            array(
+                'file' => 'app/core/Hcode/Page.php',
+                'pattern' => '/views_signature/',
+                'label' => 'Page.php usando assinatura no cache de views'
+            ),
+            array(
+                'file' => 'admin.php',
+                'pattern' => '/public\\/index\\.php/',
+                'label' => 'admin.php raiz encaminhando para public/index.php'
+            )
+        );
+
+        $found = array();
+        $missing = array();
+        foreach ($checks as $check) {
+            $path = $this->path($check['file']);
+            if (!is_file($path)) {
+                $missing[] = $check['file'] . ' ausente';
+                continue;
+            }
+
+            if (!preg_match($check['pattern'], (string)file_get_contents($path))) {
+                $missing[] = $check['label'];
+                continue;
+            }
+
+            $found[] = $check['label'];
+        }
+
+        return array('found' => $found, 'missing' => $missing);
     }
 
     private function validatePhpFiles(array $files): void
@@ -610,7 +940,200 @@ class CentralUpdatePublishService
         return trim(implode("\n", $lines));
     }
 
-    private function createZip($zipPath, array $files): array
+    private function buildUpdateManifest(string $version, string $changelog, string $zipName, array $preview): array
+    {
+        $files = [];
+        $added = [];
+        $modified = [];
+        $removed = [];
+        foreach ($preview['included'] as $file) {
+            $entry = $this->manifestFileEntry($file, true);
+            $files[] = $entry;
+            if ($entry['status_type'] === 'new') $added[] = $entry['path'];
+            if (in_array($entry['status_type'], ['modified', 'required', 'unchanged'], true)) $modified[] = $entry['path'];
+        }
+        foreach ($preview['ignored'] as $file) {
+            if (($file['status_type'] ?? '') === 'removed') {
+                $entry = $this->manifestFileEntry($file, false);
+                $removed[] = $entry['path'];
+                $files[] = $entry;
+            }
+        }
+
+        $manifest = [
+            'schema' => 'prato-update-manifest-v1',
+            'version' => $version,
+            'published_at' => portal_utc_now(),
+            'generated_by' => $this->currentUserLabel(),
+            'source_root' => $this->sourceRoot,
+            'source_audit' => $this->sourceAudit(),
+            'changelog' => $changelog,
+            'package' => [
+                'file' => $zipName,
+                'path' => '',
+                'url' => '',
+                'size' => 0,
+                'sha256' => '',
+            ],
+            'totals' => [
+                'included' => count($preview['included']),
+                'ignored' => count($preview['ignored']),
+                'added' => count($added),
+                'modified' => count($modified),
+                'removed' => count($removed),
+            ],
+            'added' => $added,
+            'modified' => $modified,
+            'removed' => $removed,
+            'files' => $files,
+            'ignored' => array_map(function ($file) {
+                return [
+                    'path' => (string)($file['path'] ?? ''),
+                    'status' => (string)($file['status'] ?? ''),
+                    'status_type' => (string)($file['status_type'] ?? ''),
+                    'reason' => (string)($file['reason'] ?? ''),
+                    'include' => false,
+                    'size' => (int)($file['size'] ?? 0),
+                    'sha256' => (string)($file['sha256'] ?? ''),
+                    'mtime' => (string)($file['mtime'] ?? ''),
+                ];
+            }, $preview['ignored']),
+        ];
+
+        $this->log('MANIFEST gerado | versao=' . $version . ' | arquivos=' . count($files));
+        return $manifest;
+    }
+
+    private function manifestFileEntry(array $file, bool $include): array
+    {
+        return [
+            'path' => $this->normalizeRelativePath((string)($file['path'] ?? '')),
+            'status' => (string)($file['status'] ?? ''),
+            'status_type' => (string)($file['status_type'] ?? ''),
+            'include' => $include,
+            'exists' => !empty($file['exists']),
+            'size' => (int)($file['size'] ?? 0),
+            'sha256' => (string)($file['sha256'] ?? ''),
+            'mtime' => (string)($file['mtime'] ?? ''),
+            'previous_sha256' => (string)($file['previous_sha256'] ?? ''),
+        ];
+    }
+
+    private function manifestPath(string $version): string
+    {
+        return $this->manifestDir() . DIRECTORY_SEPARATOR . 'manifest-v' . preg_replace('/[^A-Za-z0-9_.-]+/', '-', $version) . '.json';
+    }
+
+    private function manifestDir(): string
+    {
+        $dir = $this->updatesDir . DIRECTORY_SEPARATOR . 'manifests';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        return $dir;
+    }
+
+    private function writeManifestFile(string $version, array $manifest): void
+    {
+        $path = $this->manifestPath($version);
+        $json = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($json === false || file_put_contents($path, $json . PHP_EOL) === false) {
+            throw new Exception('Nao foi possivel gravar manifesto da atualizacao.');
+        }
+        $this->log('MANIFEST gravado | arquivo=' . $path);
+    }
+
+    private function latestManifest(): ?array
+    {
+        $files = glob($this->manifestDir() . DIRECTORY_SEPARATOR . 'manifest-v*.json') ?: [];
+        usort($files, function ($a, $b) {
+            return filemtime($b) <=> filemtime($a);
+        });
+        foreach ($files as $file) {
+            $json = json_decode((string)file_get_contents($file), true);
+            if (is_array($json) && isset($json['files']) && is_array($json['files'])) {
+                return $json;
+            }
+        }
+        return null;
+    }
+
+    private function validatePublishedZip(string $zipPath, array $expectedFiles, array $manifest, string $expectedSha): array
+    {
+        $realSha = hash_file('sha256', $zipPath);
+        if (!hash_equals($expectedSha, $realSha)) {
+            throw new Exception('Hash do ZIP mudou apos criacao. Esperado=' . $expectedSha . ' real=' . $realSha);
+        }
+
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath) !== true) {
+            throw new Exception('Nao foi possivel abrir ZIP para validacao final.');
+        }
+
+        $expected = [];
+        foreach ($expectedFiles as $file) {
+            if (!empty($file['include']) && !empty($file['path'])) {
+                $expected[] = $this->normalizeRelativePath((string)$file['path']);
+            }
+        }
+        $expected[] = 'manifest.json';
+
+        $missing = [];
+        foreach (array_values(array_unique($expected)) as $name) {
+            if ($zip->locateName($name) === false) {
+                $missing[] = $name;
+            }
+        }
+
+        $blocked = [];
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $name = $this->normalizeRelativePath((string)$zip->getNameIndex($i));
+            $reason = $this->zipBlockedReason($name);
+            if ($reason !== '') {
+                $blocked[] = $name . ' (' . $reason . ')';
+            }
+        }
+
+        $numFiles = $zip->numFiles;
+        $zip->close();
+
+        if (!empty($missing)) {
+            throw new Exception('Validacao final falhou: arquivos esperados ausentes no ZIP: ' . implode(', ', $missing));
+        }
+        if (!empty($blocked)) {
+            throw new Exception('Validacao final falhou: ZIP contem arquivos proibidos: ' . implode(', ', $blocked));
+        }
+
+        $result = [
+            'success' => true,
+            'zip_entries' => $numFiles,
+            'expected_entries' => count(array_values(array_unique($expected))),
+            'sha256' => $realSha,
+            'manifest_files' => count($manifest['files'] ?? []),
+        ];
+        $this->log('VALIDACAO FINAL ZIP ok | entradas=' . $numFiles . ' | sha256=' . $realSha);
+        return $result;
+    }
+
+    private function zipBlockedReason(string $name): string
+    {
+        $base = basename($name);
+        if ($name === '' || $name[0] === '/' || preg_match('/^[A-Za-z]:/', $name) || strpos($name, '../') !== false || strpos($name, '/..') !== false) {
+            return 'caminho inseguro';
+        }
+        if ($base !== '.env.update' && preg_match('/^\.env(?:\.|$)/i', $base)) {
+            return 'configuracao local';
+        }
+        if (preg_match('#(^|/)(\.git|\.idea|\.vscode|node_modules|storage/logs|storage/cache|storage/backup|cache|tmp|temp|logs|views-cache)(/|$)#i', $name)) {
+            return 'diretorio proibido';
+        }
+        if (preg_match('/\.(sql|zip|bak|tmp|temp|part|cache|log)$/i', $base) || preg_match('/\.rtpl\.php$/i', $base)) {
+            return 'extensao proibida';
+        }
+        return '';
+    }
+
+    private function createZip($zipPath, array $files, array $manifest): array
     {
         if (!class_exists('ZipArchive')) throw new Exception('Extensao ZipArchive nao esta habilitada.');
         $zip = new ZipArchive();
@@ -624,6 +1147,9 @@ class CentralUpdatePublishService
             $this->log('ZIP incluido | arquivo=' . $relative);
             $total++;
         }
+        $zip->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . PHP_EOL);
+        $this->log('ZIP incluido | arquivo=manifest.json');
+        $total++;
         $envUpdate = $this->buildEnvUpdateContent();
         if ($envUpdate !== '') {
             $zip->addFromString('.env.update', $envUpdate);
@@ -633,6 +1159,93 @@ class CentralUpdatePublishService
         $zip->close();
         if ($total === 0 || !is_file($zipPath)) throw new Exception('O ZIP nao recebeu arquivos validos.');
         return ['files' => $total, 'size' => filesize($zipPath), 'sha256' => hash_file('sha256', $zipPath)];
+    }
+
+    private function signPackage(string $zipPath, string $zipName, string $sha256, int $size): array
+    {
+        if (empty($this->config['package_signing_enabled'])) {
+            return ['enabled' => false];
+        }
+        if (!function_exists('openssl_sign')) {
+            throw new Exception('Assinatura de pacote habilitada, mas OpenSSL nao esta disponivel no PHP.');
+        }
+
+        $keys = $this->ensureSigningKeys();
+        $private = openssl_pkey_get_private((string)file_get_contents($keys['private']));
+        if (!$private) {
+            throw new Exception('Nao foi possivel carregar chave privada de assinatura do pacote.');
+        }
+
+        $payload = implode("\n", [
+            'prato-update-package-v1',
+            'file:' . $zipName,
+            'sha256:' . $sha256,
+            'size:' . $size,
+        ]) . "\n";
+
+        $signature = '';
+        if (!openssl_sign($payload, $signature, $private, OPENSSL_ALGO_SHA256)) {
+            throw new Exception('Nao foi possivel assinar o pacote de atualizacao.');
+        }
+
+        $sigName = $zipName . '.sig';
+        $sigPath = $this->updatesDir . DIRECTORY_SEPARATOR . $sigName;
+        $pubName = 'update-package-public.pem';
+        $pubTarget = $this->updatesDir . DIRECTORY_SEPARATOR . $pubName;
+        file_put_contents($sigPath, base64_encode($signature) . PHP_EOL);
+        copy($keys['public'], $pubTarget);
+
+        $this->log('ASSINATURA pacote ok | arquivo=' . $zipName . ' | sig=' . $sigName);
+        return [
+            'enabled' => true,
+            'algorithm' => 'RSA-SHA256',
+            'payload' => $payload,
+            'signature_base64' => base64_encode($signature),
+            'signature_file' => $sigName,
+            'signature_path' => $sigPath,
+            'signature_url' => $this->downloadBaseUrl() . '/' . rawurlencode($sigName),
+            'public_key_file' => $pubName,
+            'public_key_path' => $pubTarget,
+            'public_key_url' => $this->downloadBaseUrl() . '/' . rawurlencode($pubName),
+        ];
+    }
+
+    private function ensureSigningKeys(): array
+    {
+        $private = (string)($this->config['package_signing_private_key'] ?? '');
+        $public = (string)($this->config['package_signing_public_key'] ?? '');
+        if ($private === '' || $public === '') {
+            throw new Exception('Caminhos das chaves de assinatura nao configurados.');
+        }
+
+        foreach ([dirname($private), dirname($public)] as $dir) {
+            if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
+                throw new Exception('Nao foi possivel criar pasta de chaves: ' . $dir);
+            }
+        }
+
+        if (!is_file($private) || !is_file($public)) {
+            $key = openssl_pkey_new([
+                'private_key_bits' => 3072,
+                'private_key_type' => OPENSSL_KEYTYPE_RSA,
+            ]);
+            if (!$key) {
+                throw new Exception('Nao foi possivel gerar chave RSA de assinatura.');
+            }
+            $privatePem = '';
+            openssl_pkey_export($key, $privatePem);
+            $details = openssl_pkey_get_details($key);
+            if ($privatePem === '' || empty($details['key'])) {
+                throw new Exception('Nao foi possivel exportar chaves de assinatura.');
+            }
+            file_put_contents($private, $privatePem);
+            @chmod($private, 0600);
+            file_put_contents($public, $details['key']);
+            @chmod($public, 0644);
+            $this->log('ASSINATURA chaves RSA geradas | public=' . $public);
+        }
+
+        return ['private' => $private, 'public' => $public];
     }
 
     private function validateZipRequiredFiles($zipPath, array $required): void
@@ -647,16 +1260,9 @@ class CentralUpdatePublishService
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $name = str_replace('\\', '/', (string)$zip->getNameIndex($i));
             $base = basename($name);
-            if ($name === '' || $name[0] === '/' || preg_match('/^[a-zA-Z]:/', $name) || strpos($name, '../') !== false || strpos($name, '/..') !== false) {
-                $blocked[] = $name . ' (caminho inseguro)';
-                continue;
-            }
-            if ($base !== '.env.update' && preg_match('/^\.env(?:\.|$)/i', $base)) {
-                $blocked[] = $name . ' (configuracao local)';
-                continue;
-            }
-            if (preg_match('/\.(zip|bak|tmp|temp|part|log)$/i', $base) || preg_match('/\.rtpl\.php$/i', $base)) {
-                $blocked[] = $name . ' (arquivo temporario/sensivel)';
+            $reason = $this->zipBlockedReason($name);
+            if ($reason !== '') {
+                $blocked[] = $name . ' (' . $reason . ')';
             }
         }
         $zip->close();
@@ -669,7 +1275,7 @@ class CentralUpdatePublishService
         $lines = [
             '# Configuracoes globais distribuidas pelo pacote de atualizacao.',
             '# Aplicadas sem sobrescrever configuracoes locais protegidas da unidade.',
-            '# Gerado em ' . date('Y-m-d H:i:s'),
+            '# Gerado em ' . portal_utc_now() . ' UTC',
         ];
         $added = 0;
 
@@ -811,6 +1417,9 @@ class CentralUpdatePublishService
         if ($driver !== 'sftp') {
             $result = [];
             foreach ($files as $file) {
+                if (empty($file['path']) || empty($file['name'])) {
+                    continue;
+                }
                 $name = (string)($file['name'] ?? '');
                 $result[$name] = $this->uploadFile((string)($file['path'] ?? ''), $name);
             }
@@ -825,6 +1434,9 @@ class CentralUpdatePublishService
         foreach ($files as $file) {
             $localPath = (string)($file['path'] ?? '');
             $remoteName = (string)($file['name'] ?? '');
+            if ($localPath === '' || $remoteName === '') {
+                continue;
+            }
             if (!is_file($localPath)) {
                 throw new Exception('Arquivo nao encontrado para upload: ' . $localPath);
             }
@@ -955,6 +1567,10 @@ class CentralUpdatePublishService
 
     private function ensureVersionDoesNotExist($version): void
     {
+        if ($this->versionExists($version)) {
+            throw new Exception('A versao ' . $version . ' ja existe no historico de publicacoes.');
+        }
+
         foreach (['version.json', 'version-lite.json'] as $name) {
             $path = $this->updatesDir . DIRECTORY_SEPARATOR . $name;
             if (!is_file($path)) continue;
@@ -963,9 +1579,28 @@ class CentralUpdatePublishService
         }
     }
 
-    private function buildVersionJson($version, $zipName, $url, $changelog, $sha256): array
+    private function buildVersionJson($version, $zipName, $url, $changelog, $sha256, int $size = 0, array $signature = []): array
     {
-        return ['version' => $version, 'file' => $zipName, 'url' => $url, 'published_at' => date('Y-m-d H:i:s'), 'notes' => $changelog, 'changelog' => $changelog, 'sha256' => $sha256, 'checksum_sha256' => $sha256];
+        return [
+            'version' => $version,
+            'file' => $zipName,
+            'url' => $url,
+            'published_at' => portal_utc_now(),
+            'notes' => $changelog,
+            'changelog' => $changelog,
+            'sha256' => $sha256,
+            'checksum_sha256' => $sha256,
+            'size' => $size,
+            'size_bytes' => $size,
+            'manifest' => $this->downloadBaseUrl() . '/manifest-v' . rawurlencode($version) . '.json',
+            'signature' => !empty($signature['enabled']) ? [
+                'enabled' => true,
+                'algorithm' => (string)($signature['algorithm'] ?? 'RSA-SHA256'),
+                'signature_url' => (string)($signature['signature_url'] ?? ''),
+                'public_key_url' => (string)($signature['public_key_url'] ?? ''),
+                'payload' => (string)($signature['payload'] ?? ''),
+            ] : ['enabled' => false],
+        ];
     }
 
     private function writeJsonFile($name, array $data): void
@@ -1001,28 +1636,164 @@ class CentralUpdatePublishService
     {
         try {
             $sql = new Hcode\DB\Sql();
-            $sql->query("
-                INSERT INTO tb_atualizacoes (versao, arquivo_zip, url_download, changelog, checksum_sha256, publicado_em, created_at)
-                VALUES (:versao, :arquivo, :url, :changelog, :checksum, :publicado, NOW())
-                ON DUPLICATE KEY UPDATE arquivo_zip = VALUES(arquivo_zip), url_download = VALUES(url_download), changelog = VALUES(changelog), checksum_sha256 = VALUES(checksum_sha256), publicado_em = VALUES(publicado_em)
-            ", [
+            $columns = $this->tableColumns($sql, 'tb_atualizacoes');
+            $payload = [
                 ':versao' => $data['version'],
                 ':arquivo' => $data['file'],
                 ':url' => $data['url'],
                 ':changelog' => $data['changelog'],
                 ':checksum' => $data['checksum_sha256'],
                 ':publicado' => $data['published_at'],
-            ]);
-        } catch (Exception $e) {
+            ];
+            $insertColumns = ['versao', 'arquivo_zip', 'url_download', 'changelog', 'checksum_sha256', 'publicado_em'];
+            $insertValues = [':versao', ':arquivo', ':url', ':changelog', ':checksum', ':publicado'];
+
+            $optional = [
+                'tamanho_bytes' => [':tamanho_bytes', (int)($data['size_bytes'] ?? $data['size'] ?? 0)],
+                'tamanho_zip' => [':tamanho_zip', (int)($data['size_bytes'] ?? $data['size'] ?? 0)],
+                'status' => [':status', 'publicada'],
+                'responsavel' => [':responsavel', $this->currentUserLabel()],
+                'observacoes' => [':observacoes', (string)($data['notes'] ?? '')],
+                'manifest_url' => [':manifest_url', (string)($data['manifest'] ?? '')],
+                'signature_url' => [':signature_url', (string)($data['signature']['signature_url'] ?? '')],
+                'public_key_url' => [':public_key_url', (string)($data['signature']['public_key_url'] ?? '')],
+                'signature_algorithm' => [':signature_algorithm', (string)($data['signature']['algorithm'] ?? '')],
+            ];
+
+            foreach ($optional as $column => $value) {
+                if (in_array($column, $columns, true)) {
+                    $insertColumns[] = $column;
+                    $insertValues[] = $value[0];
+                    $payload[$value[0]] = $value[1];
+                }
+            }
+
+            if (in_array('created_at', $columns, true)) {
+                $insertColumns[] = 'created_at';
+                $insertValues[] = 'UTC_TIMESTAMP()';
+            }
+
+            $sql->query(
+                'INSERT INTO tb_atualizacoes (' . implode(', ', $insertColumns) . ') VALUES (' . implode(', ', $insertValues) . ')',
+                $payload
+            );
+            if (class_exists('Hcode\\Model\\Notification')) {
+                Hcode\Model\Notification::addUpdatePublished($data);
+            }
+        } catch (Throwable $e) {
             $this->log('WARN registro tb_atualizacoes falhou: ' . $e->getMessage());
+            throw $e;
         }
+    }
+
+    private function tableColumns($sql, string $table): array
+    {
+        try {
+            $rows = $sql->select('SHOW COLUMNS FROM ' . $table);
+            return array_values(array_filter(array_map(function ($row) {
+                return isset($row['Field']) ? (string)$row['Field'] : '';
+            }, $rows ?: [])));
+        } catch (Throwable $e) {
+            $this->log('WARN nao foi possivel ler colunas de ' . $table . ': ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    private function latestDatabaseVersion(): string
+    {
+        try {
+            $sql = new Hcode\DB\Sql();
+            $exists = $sql->select("SHOW TABLES LIKE 'tb_atualizacoes'");
+            if (empty($exists)) return '';
+            $rows = $sql->select("
+                SELECT versao
+                FROM tb_atualizacoes
+                WHERE versao IS NOT NULL AND versao <> ''
+                ORDER BY publicado_em DESC, created_at DESC, id_atualizacao DESC
+                LIMIT 1
+            ");
+            return trim((string)($rows[0]['versao'] ?? ''));
+        } catch (Throwable $e) {
+            $this->log('WARN consulta ultima versao no banco falhou: ' . $e->getMessage());
+            return '';
+        }
+    }
+
+    private function versionExists(string $version): bool
+    {
+        $version = trim($version);
+        if ($version === '') return false;
+
+        try {
+            $sql = new Hcode\DB\Sql();
+            $exists = $sql->select("SHOW TABLES LIKE 'tb_atualizacoes'");
+            if (!empty($exists)) {
+                $rows = $sql->select("SELECT COUNT(*) AS total FROM tb_atualizacoes WHERE versao = :versao", [
+                    ':versao' => $version,
+                ]);
+                if ((int)($rows[0]['total'] ?? 0) > 0) return true;
+            }
+        } catch (Throwable $e) {
+            $this->log('WARN validacao duplicidade versao no banco falhou: ' . $e->getMessage());
+        }
+
+        foreach (['version.json', 'version-lite.json'] as $name) {
+            $path = $this->updatesDir . DIRECTORY_SEPARATOR . $name;
+            if (!is_file($path)) continue;
+            $json = json_decode((string)file_get_contents($path), true);
+            if (is_array($json) && trim((string)($json['version'] ?? '')) === $version) return true;
+        }
+
+        return is_file($this->updatesDir . DIRECTORY_SEPARATOR . 'sistema-v' . $version . '.zip');
+    }
+
+    private function incrementVersion(string $version): string
+    {
+        $base = preg_replace('/[-+].*$/', '', trim($version));
+        $parts = explode('.', $base);
+        if (count($parts) < 2) {
+            $parts = [$base ?: '1', '000'];
+        }
+
+        $last = array_pop($parts);
+        if (!preg_match('/^\d+$/', $last)) {
+            $last = '0';
+        }
+        $width = strlen($last);
+        $next = (string)((int)$last + 1);
+        if ($width > 1) {
+            $next = str_pad($next, $width, '0', STR_PAD_LEFT);
+        }
+        $parts[] = $next;
+        return implode('.', $parts);
+    }
+
+    private function logPublicationAudit(array $result): void
+    {
+        $usuario = null;
+        try {
+            if (class_exists('Hcode\\Model\\Funcionarios')) {
+                $usuario = Hcode\Model\Funcionarios::getFromSession();
+            }
+        } catch (Throwable $e) {
+            $usuario = null;
+        }
+
+        $nome = $usuario && method_exists($usuario, 'getnome_funcionario') ? $usuario->getnome_funcionario() : 'sistema';
+        $cpf = $usuario && method_exists($usuario, 'getcpf') ? $usuario->getcpf() : '';
+        $this->log('AUDITORIA publicacao | usuario=' . $nome . ' | cpf=' . $cpf . ' | versao=' . ($result['version'] ?? '') . ' | zip=' . ($result['zip_name'] ?? '') . ' | arquivos=' . count($result['included'] ?? []));
     }
 
     private function downloadUrl($zipName): string
     {
-        $base = rtrim((string)($this->config['public_base_url'] ?? ''), '/');
+        $base = $this->downloadBaseUrl();
         if ($base === '') throw new Exception('UPDATE_PUBLISH_PUBLIC_BASE_URL nao configurado.');
         return $base . '/' . rawurlencode($zipName);
+    }
+
+    private function downloadBaseUrl(): string
+    {
+        return rtrim((string)($this->config['public_base_url'] ?? ''), '/');
     }
 
     private function normalizeVersion($version): string
@@ -1148,6 +1919,6 @@ class CentralUpdatePublishService
         $dir = LOG_DIR;
         if (!is_dir($dir)) @mkdir($dir, 0775, true);
         $file = $this->config['log_file'] ?? 'update-publish.log';
-        @file_put_contents($dir . DIRECTORY_SEPARATOR . $file, '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL, FILE_APPEND);
+        @file_put_contents($dir . DIRECTORY_SEPARATOR . $file, '[' . portal_log_timestamp() . '] ' . $message . PHP_EOL, FILE_APPEND);
     }
 }

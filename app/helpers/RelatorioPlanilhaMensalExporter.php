@@ -63,6 +63,8 @@ class RelatorioPlanilhaMensalExporter
 {
     /** @var Sql */
     protected $sql;
+    /** @var AccessScopeService */
+    protected $scope;
 
     /**
      * Prefixos que aparecem no Excel e não devem atrapalhar o match com nome_banco.
@@ -89,9 +91,10 @@ class RelatorioPlanilhaMensalExporter
     /** @var bool */
     protected $debugPlanilha = false;
 
-    public function __construct(Sql $sql)
+    public function __construct(Sql $sql, ?AccessScopeService $scope = null)
     {
         $this->sql = $sql;
+        $this->scope = $scope ?: new AccessScopeService($sql);
     }
 
     /**
@@ -118,10 +121,11 @@ class RelatorioPlanilhaMensalExporter
      *
      * @throws Exception
      */
-    public function exportar($templatePath, $outputPath, $ano, $mes, $somenteFechados = true)
+    public function exportar($templatePath, $outputPath, $ano, $mes, $somenteFechados = true, string $regiao = '')
     {
         $ano = (int)$ano;
         $mes = (int)$mes;
+        $regiao = $this->scope->normalizeRegionCode($regiao);
 
         if ($ano < 2000 || $ano > 2100) {
             throw new Exception('Ano inválido para exportação.');
@@ -143,7 +147,7 @@ class RelatorioPlanilhaMensalExporter
             throw new Exception('A aba do mês ' . $mes . ' não foi encontrada na planilha.');
         }
 
-        $registros = $this->buscarDados($ano, $mes, $somenteFechados);
+        $registros = $this->buscarDados($ano, $mes, $somenteFechados, $regiao);
         $mapaUnidadesNaPlanilha = $this->mapearUnidadesNaPlanilha($sheet);
         $mapaCampos = $this->montarMapaCampos();
 
@@ -206,7 +210,7 @@ class RelatorioPlanilhaMensalExporter
      * @param bool $somenteFechados
      * @return array
      */
-    protected function buscarDados($ano, $mes, $somenteFechados = true)
+    protected function buscarDados($ano, $mes, $somenteFechados = true, string $regiao = '')
     {
         $where = [
             'YEAR(data) = :ano',
@@ -221,6 +225,9 @@ class RelatorioPlanilhaMensalExporter
         if ($somenteFechados) {
             $where[] = 'fechado = 1';
         }
+
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $this->scope->dataConstraint('tb_relatorios', 'tb_relatorios', 'planilha_export'));
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $this->scope->regionConstraint('tb_relatorios', 'tb_relatorios', 'planilha_export_regiao', $regiao));
 
         $sql = "
             SELECT

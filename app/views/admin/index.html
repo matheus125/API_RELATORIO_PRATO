@@ -10,7 +10,7 @@
           </div>
           <div class="d-flex gap-2 flex-wrap">
             {if="canAccess('FUNCIONARIOS_VIEW')"}<a href="/admin/funcionarios" class="btn btn-light text-primary"><i class="bi bi-people me-1"></i> Funcionários</a>{/if}
-            {if="canAccess('DASHBOARD_VIEW')"}<a href="/admin/relatorio/pdf/historico" class="btn btn-outline-light"><i class="bi bi-file-earmark-pdf me-1"></i> PDFs</a>{/if}
+            {if="canAccess('PDF_HISTORICO_VIEW')"}<a href="/admin/relatorio/pdf/historico" class="btn btn-outline-light"><i class="bi bi-file-earmark-pdf me-1"></i> PDFs</a>{/if}
           </div>
         </div>
       </div>
@@ -45,7 +45,7 @@
           </div>
         </div>
         <div class="col-xl-3 col-md-6">
-          <a href="/admin/unidades-atualizadas" class="text-decoration-none">
+          {if="canAccess('UNIDADES_ATUALIZADAS_VIEW')"}<a href="/admin/unidades-atualizadas" class="text-decoration-none">{/if}
             <div class="small-box text-bg-info shadow-sm rounded-4">
               <div class="inner">
                 <h3>{$stats.unidades_atualizadas}</h3>
@@ -53,7 +53,7 @@
               </div>
               <i class="small-box-icon bi bi-building-check"></i>
             </div>
-          </a>
+          {if="canAccess('UNIDADES_ATUALIZADAS_VIEW')"}</a>{/if}
         </div>
         <div class="col-xl-3 col-md-6">
           <div class="small-box text-bg-warning shadow-sm rounded-4">

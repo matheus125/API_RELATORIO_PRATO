@@ -6,13 +6,16 @@ class IntelligentAnalysisService
 {
     /** @var Sql */
     private $sql;
+    /** @var AccessScopeService */
+    private $scope;
 
     private $tableCache = [];
     private $columnCache = [];
 
-    public function __construct(Sql $sql)
+    public function __construct(Sql $sql, ?AccessScopeService $scope = null)
     {
         $this->sql = $sql;
+        $this->scope = $scope ?: new AccessScopeService($sql);
     }
 
     public function getResumo(array $filters = []): array
@@ -186,13 +189,21 @@ class IntelligentAnalysisService
             return [];
         }
 
+        $constraint = $this->scope->dataConstraint('tb_relatorios', 'tb_relatorios', 'dashboard_unidades');
+        $where = [
+            "{$this->quote($nameCol)} IS NOT NULL",
+            "{$this->quote($nameCol)} <> ''"
+        ];
+        $params = [];
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $constraint);
+
         return $this->sql->select("
             SELECT {$this->quote($nameCol)} AS id, {$this->quote($nameCol)} AS nome
             FROM tb_relatorios
-            WHERE {$this->quote($nameCol)} IS NOT NULL AND {$this->quote($nameCol)} <> ''
+            WHERE " . implode(' AND ', $where) . "
             GROUP BY {$this->quote($nameCol)}
             ORDER BY {$this->quote($nameCol)}
-        ");
+        ", $params);
     }
 
     private function periodStats(string $start, string $end, array $filters): array
@@ -351,7 +362,7 @@ class IntelligentAnalysisService
     private function sumExpr(string $alias, array $candidates): string
     {
         $column = $this->firstColumn('tb_relatorios', $candidates);
-        return $column ? "SUM(COALESCE({$alias}.{$this->quote($column)}, 0))" : '0';
+        return $column ? "COALESCE(SUM(COALESCE({$alias}.{$this->quote($column)}, 0)), 0)" : '0';
     }
 
     private function buildWhere(string $alias, string $table, array $filters, ?string $dateCol): array
@@ -377,6 +388,12 @@ class IntelligentAnalysisService
                 $params[':unidade'] = $filters['unidade_id'];
             }
         }
+
+        [$clauses, $params] = $this->scope->appendConstraint(
+            $clauses,
+            $params,
+            $this->scope->dataConstraint($table, $alias, 'dashboard_scope_' . $table)
+        );
 
         return [
             'sql' => $clauses ? 'WHERE ' . implode(' AND ', $clauses) : '',
@@ -434,7 +451,13 @@ class IntelligentAnalysisService
             return null;
         }
 
-        $rows = $this->sql->select("SELECT MAX({$this->quote($column)}) AS latest FROM {$table}");
+        $constraint = $this->scope->dataConstraint($table, 't', 'latest_' . $table);
+        $where = [];
+        $params = [];
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $constraint);
+        $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        $rows = $this->sql->select("SELECT MAX(t.{$this->quote($column)}) AS latest FROM {$table} t {$whereSql}", $params);
         return $rows[0]['latest'] ?? null;
     }
 
@@ -460,7 +483,14 @@ class IntelligentAnalysisService
             return 0;
         }
 
-        $rows = $this->sql->select("SELECT COUNT(DISTINCT {$this->quote($column)}) AS total FROM tb_relatorios WHERE {$this->quote($column)} IS NOT NULL AND {$this->quote($column)} <> ''");
+        $where = [
+            "{$this->quote($column)} IS NOT NULL",
+            "{$this->quote($column)} <> ''",
+        ];
+        $params = [];
+        [$where, $params] = $this->scope->appendConstraint($where, $params, $this->scope->dataConstraint('tb_relatorios', 'tb_relatorios', 'active_units'));
+
+        $rows = $this->sql->select("SELECT COUNT(DISTINCT {$this->quote($column)}) AS total FROM tb_relatorios WHERE " . implode(' AND ', $where), $params);
         return (int)($rows[0]['total'] ?? 0);
     }
 
