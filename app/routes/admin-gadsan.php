@@ -32,7 +32,7 @@ function gadsanRender(string $view,array $data=[]): void
     $adminLayout=new PageAdmin();
     require APP_DIR.'/views/admin/gadsan/layout-top.php';
     require APP_DIR.'/views/admin/gadsan/'.$view.'.php';
-    echo '</div></main>';
+    echo '</div></div></main>';
     echo '<script src="/res/admin/gadsan/masks.js" defer></script>';
     echo '<script src="/res/admin/gadsan/forms.js" defer></script>';
     unset($adminLayout);

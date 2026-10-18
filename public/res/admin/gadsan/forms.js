@@ -61,4 +61,10 @@
     const button = form.querySelector('button[type="submit"],.card-footer button');
     if (button) { button.disabled=true; button.textContent='Salvando…'; }
   }));
+  const fileInput = module.querySelector('#arquivo');
+  const fileName = module.querySelector('[data-file-name]');
+  if (fileInput && fileName) fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    fileName.textContent = file ? file.name : 'Selecione sua planilha Excel';
+  });
 })();
